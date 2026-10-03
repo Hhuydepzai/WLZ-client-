@@ -22,24 +22,14 @@ jobs:
           unzip -q app.zip
           unzip -q tools.zip
 
-      - name: Find Gradle project
-        run: |
-          echo "Searching for Gradle project..."
-          find . -name "gradlew" -type f -print
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
 
       - name: Build APK
         run: |
-          GRADLEW=$(find . -name "gradlew" -type f | head -n 1)
-          if [ -z "$GRADLEW" ]; then
-            echo "ERROR: Cannot find gradlew"
-            find . -maxdepth 3 -type f | head -100
-            exit 1
-          fi
-
-          PROJECT_DIR=$(dirname "$GRADLEW")
-          cd "$PROJECT_DIR"
-          chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
+          gradle assembleDebug --stacktrace
 
       - name: Find APK
         run: |
