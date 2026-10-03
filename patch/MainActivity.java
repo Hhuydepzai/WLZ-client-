@@ -70,7 +70,6 @@ public final class MainActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         refreshStatus();
-        maybeStartOverlay();
     }
 
     private View buildSplash() {
@@ -315,7 +314,6 @@ public final class MainActivity extends Activity {
     }
 
     private void launchMinecraft() {
-        maybeStartOverlay();
         Intent intent = getPackageManager().getLaunchIntentForPackage(MC_PACKAGE);
         if (intent == null) {
             Toast.makeText(this, "Chưa cài Minecraft Bedrock.", Toast.LENGTH_LONG).show();
@@ -323,6 +321,8 @@ public final class MainActivity extends Activity {
         }
         try {
             startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED));
+            // Let Minecraft finish its process/activity startup before showing the system overlay.
+            handler.postDelayed(this::maybeStartOverlay, 1800L);
         } catch (Throwable e) {
             Toast.makeText(this, "Không thể mở Minecraft.", Toast.LENGTH_LONG).show();
         }
