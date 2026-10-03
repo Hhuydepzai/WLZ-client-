@@ -8,6 +8,6 @@
         <item name="android:navigationBarColor">#0A0B0E</item>
         <item name="android:colorAccent">#F67314</item>
         <item name="android:windowNoTitle">true</item>
-        <item name="android:windowBackground">@drawable/wlz_splash</item>
+        <item name="android:windowBackground">#0A0B0E</item>
     </style>
 </resources>
