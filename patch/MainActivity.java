@@ -10,11 +10,14 @@ import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
 import android.widget.CompoundButton;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Switch;
@@ -27,7 +30,6 @@ import java.util.Map;
 public final class MainActivity extends Activity {
     private static final String MC_PACKAGE = "com.mojang.minecraftpe";
     private static final String PREFS = "wlz_settings";
-    private static final int MODULES = 9;
 
     private static final int BG = Color.rgb(10, 11, 14);
     private static final int PANEL = Color.rgb(19, 20, 24);
@@ -42,6 +44,7 @@ public final class MainActivity extends Activity {
     private final Map<String, ModuleDef> modules = new LinkedHashMap<>();
     private SharedPreferences prefs;
     private TextView status;
+    private final Handler handler = new Handler(Looper.getMainLooper());
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -50,13 +53,52 @@ public final class MainActivity extends Activity {
         prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         defineModules();
         try { RuntimeBridge.nativeIsLoaded(); } catch (Throwable ignored) {}
-        setContentView(buildUi());
+
+        // Splash is drawn inside the Activity instead of as windowBackground.
+        // This avoids startup crashes from resource inflation on some Android builds.
+        setContentView(buildSplash());
+        handler.postDelayed(() -> {
+            if (!isFinishing() && !isDestroyed()) setContentView(buildUi());
+        }, 900L);
+    }
+
+    @Override protected void onDestroy() {
+        handler.removeCallbacksAndMessages(null);
+        super.onDestroy();
     }
 
     @Override protected void onResume() {
         super.onResume();
         refreshStatus();
         maybeStartOverlay();
+    }
+
+    private View buildSplash() {
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setGravity(Gravity.CENTER);
+        root.setBackgroundColor(BG);
+        root.setPadding(dp(24), dp(24), dp(24), dp(24));
+
+        ImageView icon = new ImageView(this);
+        icon.setImageResource(com.wlz.client.R.drawable.wlz_icon);
+        icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        root.addView(icon, new LinearLayout.LayoutParams(dp(118), dp(118)));
+
+        TextView title = text("WLZ CLIENT", 24, TEXT, true);
+        title.setGravity(Gravity.CENTER);
+        root.addView(title, topCentered(14));
+
+        TextView sub = text("Starting client…", 10, ORANGE_LIGHT, false);
+        sub.setGravity(Gravity.CENTER);
+        root.addView(sub, topCentered(5));
+        return root;
+    }
+
+    private LinearLayout.LayoutParams topCentered(int margin) {
+        LinearLayout.LayoutParams p = lp(-1, -2);
+        p.topMargin = dp(margin);
+        return p;
     }
 
     private void defineModules() {
