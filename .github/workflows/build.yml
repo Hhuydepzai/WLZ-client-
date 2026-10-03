@@ -1,1 +1,54 @@
+name: Build WLZ Client
 
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Extract project
+        run: |
+          unzip -q app.zip
+          unzip -q tools.zip
+
+      - name: Find Gradle project
+        run: |
+          echo "Searching for Gradle project..."
+          find . -name "gradlew" -type f -print
+
+      - name: Build APK
+        run: |
+          GRADLEW=$(find . -name "gradlew" -type f | head -n 1)
+          if [ -z "$GRADLEW" ]; then
+            echo "ERROR: Cannot find gradlew"
+            find . -maxdepth 3 -type f | head -100
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$GRADLEW")
+          cd "$PROJECT_DIR"
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace
+
+      - name: Find APK
+        run: |
+          find . -type f -name "*.apk" -print
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: WLZ-Client-APK
+          path: |
+            **/build/outputs/apk/**/*.apk
+          if-no-files-found: error
