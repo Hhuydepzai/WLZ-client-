@@ -1,12 +1,4 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item>
-        <shape>
-            <solid android:color="#0B110F" />
-        </shape>
-    </item>
-    <item
-        android:gravity="center"
-        android:width="180dp"
-        android:height="180dp"
-        android:drawable="@drawable/wlz_icon" />
+    <item android:drawable="#0A0B0E" />
+    <item android:gravity="center" android:width="180dp" android:height="180dp" android:drawable="@drawable/wlz_icon" />
 </layer-list>
