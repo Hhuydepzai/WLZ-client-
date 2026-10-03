@@ -297,14 +297,6 @@ public final class MainActivity extends Activity {
     private void setNativeParam(int key, int value) {
     }
 
-    private void maybeStartOverlay() {
-        if (!Settings.canDrawOverlays(this)) return;
-        try {
-            Intent i = new Intent(this, OverlayService.class);
-            if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
-        } catch (Throwable ignored) {}
-    }
-
     private void launchMinecraft() {
         Intent intent = getPackageManager().getLaunchIntentForPackage(MC_PACKAGE);
         if (intent == null) {
