@@ -26,6 +26,7 @@ jobs:
 
       - name: Apply WLZ patch
         run: |
+          mkdir -p app/src/main/res/drawable
           cp patch/OverlayService.java app/src/main/java/com/wlz/client/OverlayService.java
           cp patch/wlz_icon.xml app/src/main/res/drawable/wlz_icon.xml
           cp patch/wlz_splash.xml app/src/main/res/drawable/wlz_splash.xml
