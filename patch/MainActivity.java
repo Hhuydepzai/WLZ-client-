@@ -52,7 +52,6 @@ public final class MainActivity extends Activity {
         getWindow().setNavigationBarColor(BG);
         prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         defineModules();
-        try { RuntimeBridge.nativeIsLoaded(); } catch (Throwable ignored) {}
 
         // Splash is drawn inside the Activity instead of as windowBackground.
         // This avoids startup crashes from resource inflation on some Android builds.
@@ -267,7 +266,6 @@ public final class MainActivity extends Activity {
         syncNative(module.index, checked);
         sw.setOnCheckedChangeListener((CompoundButton b, boolean enabled) -> {
             prefs.edit().putBoolean(module.key(), enabled).apply();
-            syncNative(module.index, enabled);
         });
         row.addView(sw, lp(-2, -2));
 
@@ -285,10 +283,6 @@ public final class MainActivity extends Activity {
                 .putBoolean("fix_remove_effects", removeEffects)
                 .putInt("texture_colors", colors)
                 .apply();
-        syncNative(8, true);
-        setNativeParam(3, level);
-        setNativeParam(4, removeEffects ? 1 : 0);
-        setNativeParam(5, colors);
     }
 
     private String profileName(int level) {
@@ -298,11 +292,9 @@ public final class MainActivity extends Activity {
     }
 
     private void syncNative(int index, boolean enabled) {
-        try { RuntimeBridge.nativeSetModule(index, enabled); } catch (Throwable ignored) {}
     }
 
     private void setNativeParam(int key, int value) {
-        try { RuntimeBridge.nativeSetParam(key, value); } catch (Throwable ignored) {}
     }
 
     private void maybeStartOverlay() {
@@ -322,7 +314,6 @@ public final class MainActivity extends Activity {
         try {
             startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED));
             // Let Minecraft finish its process/activity startup before showing the system overlay.
-            handler.postDelayed(this::maybeStartOverlay, 1800L);
         } catch (Throwable e) {
             Toast.makeText(this, "Không thể mở Minecraft.", Toast.LENGTH_LONG).show();
         }
@@ -330,7 +321,6 @@ public final class MainActivity extends Activity {
 
     private void openOverlaySettings() {
         if (Settings.canDrawOverlays(this)) {
-            maybeStartOverlay();
             Toast.makeText(this, "WLZ Overlay đã bật.", Toast.LENGTH_SHORT).show();
             return;
         }
