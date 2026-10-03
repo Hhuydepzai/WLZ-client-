@@ -232,8 +232,9 @@ public final class OverlayService extends Service {
     private void hidePanel() { if (panel != null) panel.setVisibility(View.GONE); }
 
     private WindowManager.LayoutParams overlayLp(int w, int h, int x, int y, boolean focusable) {
-        int flags = WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS |
-                (focusable ? WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL : WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);
+        int flags = focusable
+                ? WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                : WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
         WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
                 dp(w), dp(h), WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
                 flags, PixelFormat.TRANSLUCENT);
