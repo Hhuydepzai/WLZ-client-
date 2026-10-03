@@ -22,6 +22,223 @@ jobs:
           unzip -q app.zip
           unzip -q tools.zip
 
+      - name: Apply WLZ UI and floating overlay
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          app = Path("app")
+          main = app / "src/main/java/com/wlz/client/MainActivity.java"
+          manifest = app / "src/main/AndroidManifest.xml"
+          styles = app / "src/main/res/values/styles.xml"
+          drawable = app / "src/main/res/drawable"
+          overlay = app / "src/main/java/com/wlz/client/OverlayService.java"
+          drawable.mkdir(parents=True, exist_ok=True)
+
+          s = main.read_text()
+          if "maybeStartOverlay();" not in s:
+              s = s.replace(
+                  "        setContentView(buildUi());\n",
+                  "        setContentView(buildUi());\n        maybeStartOverlay();\n",
+                  1,
+              )
+          if "private void maybeStartOverlay()" not in s:
+              marker = "    private void defineModules() {\n"
+              method = """    private void maybeStartOverlay() {
+          if (!Settings.canDrawOverlays(this)) return;
+          try {
+              Intent i = new Intent(this, OverlayService.class);
+              if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(i);
+              else startService(i);
+          } catch (Throwable ignored) {}
+      }
+
+      """
+              s = s.replace(marker, method + marker, 1)
+
+          old = """    private void openOverlaySettings() {
+          try { startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()))); }
+          catch (Exception e) { startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)); }
+      }
+      """
+          new = """    private void openOverlaySettings() {
+          if (Settings.canDrawOverlays(this)) {
+              maybeStartOverlay();
+              Toast.makeText(this, "WLZ Overlay đã bật", Toast.LENGTH_SHORT).show();
+              return;
+          }
+          try { startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()))); }
+          catch (Exception e) { startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)); }
+      }
+      """
+          if old in s:
+              s = s.replace(old, new, 1)
+
+          s = s.replace(
+              "    @Override protected void onResume() { super.onResume(); refreshStatus(); }\n",
+              "    @Override protected void onResume() { super.onResume(); refreshStatus(); maybeStartOverlay(); }\n",
+              1,
+          )
+          main.write_text(s)
+
+          m = manifest.read_text()
+          if "android.permission.FOREGROUND_SERVICE_SPECIAL_USE" not in m:
+              m = m.replace(
+                  '    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />\n',
+                  '    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />\n'
+                  '    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n'
+                  '    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />\n',
+                  1,
+              )
+          if 'android:icon="@drawable/wlz_icon"' not in m:
+              m = m.replace(
+                  '        android:label="WLZ Client"\n',
+                  '        android:label="WLZ Client"\n'
+                  '        android:icon="@drawable/wlz_icon"\n'
+                  '        android:roundIcon="@drawable/wlz_icon"\n',
+                  1,
+              )
+          if 'android:name=".OverlayService"' not in m:
+              marker = '        <activity\n            android:name=".MainActivity"\n'
+              service = """        <service
+              android:name=".OverlayService"
+              android:exported="false"
+              android:foregroundServiceType="specialUse">
+              <property
+                  android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                  android:value="WLZ floating controls" />
+          </service>
+          """
+              m = m.replace(marker, service + marker, 1)
+          manifest.write_text(m)
+
+          t = styles.read_text()
+          if "@drawable/wlz_splash" not in t:
+              t = t.replace(
+                  '        <item name="android:windowNoTitle">true</item>\n',
+                  '        <item name="android:windowNoTitle">true</item>\n'
+                  '        <item name="android:windowBackground">@drawable/wlz_splash</item>\n',
+                  1,
+              )
+          styles.write_text(t)
+
+          (drawable / "wlz_icon.xml").write_text("""<vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+              <path android:fillColor="#0B110F" android:pathData="M54,2A52,52 0,1 0,54 106A52,52 0,1 0,54 2"/>
+              <path android:fillColor="#EF7012" android:pathData="M20,25L34,25L43,62L54,34L65,62L74,25L88,25L72,83L59,83L54,66L49,83L36,83Z"/>
+          </vector>\n""")
+
+          (drawable / "wlz_splash.xml").write_text("""<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+              <item android:drawable="#0B110F" />
+              <item android:gravity="center" android:width="180dp" android:height="180dp" android:drawable="@drawable/wlz_icon" />
+          </layer-list>\n""")
+
+          overlay.write_text(r'''package com.wlz.client;
+
+          import android.app.*;
+          import android.content.*;
+          import android.graphics.*;
+          import android.graphics.drawable.GradientDrawable;
+          import android.os.*;
+          import android.provider.Settings;
+          import android.view.*;
+          import android.widget.*;
+
+          public final class OverlayService extends Service {
+              private static final int BG=Color.rgb(11,17,15), PANEL=Color.rgb(18,27,23), PANEL2=Color.rgb(23,33,28);
+              private static final int ORANGE=Color.rgb(239,112,18), TEXT=Color.rgb(241,239,231), MUTED=Color.rgb(164,171,163);
+              private static final int MOSS=Color.rgb(100,119,66), MOSS_DARK=Color.rgb(48,63,43), GRAPHITE=Color.rgb(47,54,51);
+              private static final String CH="wlz_overlay";
+              private static final String[] N={"Zoom","FreeLook","Ném đồ","Unlock FPS","Fullbright","Hitbox","AutoSprint","Snaplook","FPS Counter","Super Fix Lag"};
+              private WindowManager wm;
+              private WindowManager.LayoutParams bp,pp;
+              private TextView bubble;
+              private LinearLayout panel;
+              private SharedPreferences prefs;
+
+              @Override public void onCreate(){
+                  super.onCreate();
+                  prefs=getSharedPreferences("wlz_settings",MODE_PRIVATE);
+                  if(!Settings.canDrawOverlays(this)){stopSelf();return;}
+                  startFg();
+                  wm=(WindowManager)getSystemService(WINDOW_SERVICE);
+                  makeBubble();
+                  makePanel();
+              }
+
+              private void startFg(){
+                  NotificationManager nm=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);
+                  if(Build.VERSION.SDK_INT>=26) nm.createNotificationChannel(new NotificationChannel(CH,"WLZ Overlay",NotificationManager.IMPORTANCE_LOW));
+                  PendingIntent pi=PendingIntent.getActivity(this,1,new Intent(this,MainActivity.class),
+                          Build.VERSION.SDK_INT>=23?PendingIntent.FLAG_IMMUTABLE:0);
+                  Notification.Builder b=Build.VERSION.SDK_INT>=26?new Notification.Builder(this,CH):new Notification.Builder(this);
+                  b.setSmallIcon(android.R.drawable.ic_menu_manage).setContentTitle("WLZ Client")
+                   .setContentText("Floating controls đang chạy").setContentIntent(pi).setOngoing(true);
+                  Notification n=b.build();
+                  if(Build.VERSION.SDK_INT>=34) startForeground(1104,n,android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+                  else startForeground(1104,n);
+              }
+
+              private void makeBubble(){
+                  bubble=new TextView(this); bubble.setText("WLZ"); bubble.setTextSize(12); bubble.setTextColor(TEXT);
+                  bubble.setGravity(Gravity.CENTER); bubble.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+                  bubble.setBackground(circle(ORANGE,2)); bubble.setElevation(dp(8));
+                  bubble.setOnTouchListener(new View.OnTouchListener(){
+                      float dx,dy; int sx,sy; boolean moved;
+                      public boolean onTouch(View v,MotionEvent e){
+                          if(e.getAction()==MotionEvent.ACTION_DOWN){dx=e.getRawX();dy=e.getRawY();sx=bp.x;sy=bp.y;moved=false;return true;}
+                          if(e.getAction()==MotionEvent.ACTION_MOVE){
+                              int nx=sx+(int)(e.getRawX()-dx), ny=sy+(int)(e.getRawY()-dy);
+                              if(Math.abs(nx-sx)+Math.abs(ny-sy)>dp(8)) moved=true;
+                              bp.x=Math.max(0,nx);bp.y=Math.max(0,ny);
+                              try{wm.updateViewLayout(bubble,bp);}catch(Throwable ignored){}
+                              return true;
+                          }
+                          if(e.getAction()==MotionEvent.ACTION_UP){if(!moved)toggle();return true;}
+                          return false;
+                      }
+                  });
+                  bp=lp(56,56,20,220,false); add(bubble,bp);
+              }
+
+              private void makePanel(){
+                  panel=new LinearLayout(this); panel.setOrientation(LinearLayout.VERTICAL); panel.setPadding(dp(10),dp(10),dp(10),dp(10));
+                  panel.setBackground(round(PANEL,ORANGE,1,16));
+                  LinearLayout head=new LinearLayout(this); head.setGravity(Gravity.CENTER_VERTICAL);
+                  TextView title=text("WLZ CLIENT",16,TEXT,true); head.addView(title,new LinearLayout.LayoutParams(0,-2,1));
+                  Button close=button("×"); close.setOnClickListener(v->hide()); head.addView(close,new LinearLayout.LayoutParams(dp(44),dp(40))); panel.addView(head);
+                  TextView tip=text("Kéo nút WLZ để đổi vị trí",10,MUTED,false); panel.addView(tip);
+                  ScrollView sc=new ScrollView(this); LinearLayout list=new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL);
+                  for(int i=0;i<N.length;i++){ final int id=i; LinearLayout row=new LinearLayout(this); row.setGravity(Gravity.CENTER_VERTICAL); row.setPadding(dp(7),0,0,0); row.setBackground(round(PANEL2,GRAPHITE,1,10));
+                      TextView tv=text(N[i],12,TEXT,true); row.addView(tv,new LinearLayout.LayoutParams(0,dp(44),1));
+                      Switch sw=new Switch(this); sw.setChecked(prefs.getBoolean("m_"+id,false));
+                      sw.setOnCheckedChangeListener((b,c)->{prefs.edit().putBoolean("m_"+id,c).apply();try{RuntimeBridge.nativeSetModule(id,c);}catch(Throwable ignored){}});
+                      row.addView(sw,new LinearLayout.LayoutParams(-2,dp(44))); LinearLayout.LayoutParams rlp=new LinearLayout.LayoutParams(-1,dp(47)); rlp.bottomMargin=dp(4); list.addView(row,rlp);
+                  }
+                  sc.addView(list); panel.addView(sc,new LinearLayout.LayoutParams(-1,dp(330)));
+                  Button hide=button("Ẩn overlay"); hide.setOnClickListener(v->stopSelf()); LinearLayout.LayoutParams hlp=new LinearLayout.LayoutParams(-1,dp(42)); hlp.topMargin=dp(7); panel.addView(hide,hlp);
+                  pp=lp(286,420,14,290,true); panel.setVisibility(View.GONE); add(panel,pp);
+              }
+
+              private void toggle(){if(panel.getVisibility()==View.VISIBLE)hide();else{pp.x=Math.max(8,bp.x-dp(8));pp.y=Math.max(8,bp.y+dp(62));panel.setVisibility(View.VISIBLE);try{wm.updateViewLayout(panel,pp);}catch(Throwable ignored){}}}
+              private void hide(){panel.setVisibility(View.GONE);}
+              private WindowManager.LayoutParams lp(int w,int h,int x,int y,boolean focus){
+                  int f=WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS|(focus?WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL:WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);
+                  return new WindowManager.LayoutParams(dp(w),dp(h),WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,f,PixelFormat.TRANSLUCENT){{gravity=Gravity.TOP|Gravity.START;this.x=dp(x);this.y=dp(y);}};
+              }
+              private void add(View v,WindowManager.LayoutParams p){try{wm.addView(v,p);}catch(Throwable ignored){}}
+              private TextView text(String s,float z,int c,boolean b){TextView t=new TextView(this);t.setText(s);t.setTextSize(z);t.setTextColor(c);if(b)t.setTypeface(Typeface.DEFAULT,Typeface.BOLD);return t;}
+              private Button button(String s){Button b=new Button(this);b.setText(s);b.setTextColor(TEXT);b.setTextSize(11);b.setAllCaps(false);b.setBackground(round(MOSS_DARK,MOSS,1,10));return b;}
+              private GradientDrawable round(int fill,int stroke,int w,int r){GradientDrawable d=new GradientDrawable();d.setColor(fill);d.setCornerRadius(dp(r));d.setStroke(dp(w),stroke);return d;}
+              private GradientDrawable circle(int fill,int w){GradientDrawable d=new GradientDrawable();d.setShape(GradientDrawable.OVAL);d.setColor(fill);d.setStroke(dp(w),Color.WHITE);return d;}
+              private int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}
+              @Override public int onStartCommand(Intent i,int f,int id){return START_STICKY;}
+              @Override public void onDestroy(){try{if(bubble!=null)wm.removeView(bubble);}catch(Throwable ignored){} try{if(panel!=null)wm.removeView(panel);}catch(Throwable ignored){} super.onDestroy();}
+              @Override public IBinder onBind(Intent i){return null;}
+          }
+          ''')
+          PY
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
