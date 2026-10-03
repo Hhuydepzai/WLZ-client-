@@ -113,8 +113,7 @@ if "private void addFixProfileControls" not in s:
         });
         card.addView(fx);
 
-        card.addView(text("Cấp 1: fix nhẹ • 4 màu\nCấp 2: fix mạnh • 4 màu\nCấp 3: fix siêu mạnh • 3 màu",
-                10, MUTED, false), top(2));
+        card.addView(text("Cấp 1: fix nhẹ • 4 màu | Cấp 2: fix mạnh • 4 màu | Cấp 3: fix siêu mạnh • 3 màu", 10, MUTED, false), top(2));
         return card;
     }
 
