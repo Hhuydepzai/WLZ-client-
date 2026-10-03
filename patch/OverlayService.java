@@ -35,7 +35,7 @@ public final class OverlayService extends Service {
     private static final int MOSS_DARK=Color.rgb(48,63,43);
     private static final int GRAPHITE=Color.rgb(47,54,51);
     private static final String CH="wlz_overlay";
-    private static final String[] N={"Zoom","FreeLook","Ném đồ","Unlock FPS","Fullbright","Hitbox","AutoSprint","Snaplook","FPS Counter","Super Fix Lag"};
+    private static final String[] N={"Zoom","FreeLook","Ném đồ","Unlock FPS","Fullbright","Hitbox","AutoSprint","Snaplook","FPS Counter","FIX MODE"};
 
     private WindowManager wm;
     private WindowManager.LayoutParams bubbleLp,panelLp;
