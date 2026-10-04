@@ -13,12 +13,12 @@
         android:theme="@style/AppTheme">
 
         <service
-            android:name=".OverlayService"
+            android:name=".WlzPreloadService"
             android:exported="false"
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="WLZ floating in-game controls" />
+                android:value="WLZ preload runtime and floating client controls" />
         </service>
 
         <activity
