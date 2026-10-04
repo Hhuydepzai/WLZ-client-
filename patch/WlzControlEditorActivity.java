@@ -41,6 +41,7 @@ public final class WlzControlEditorActivity extends Activity {
     }
 
     private void build() {
+        root.removeAllViews();
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
         page.setPadding(dp(14), dp(12), dp(14), dp(12));
