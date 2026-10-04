@@ -1,27 +1,28 @@
 from pathlib import Path
 import shutil
 
-app = Path("app")
-main = app / "src/main/java/com/wlz/client/MainActivity.java"
-overlay = app / "src/main/java/com/wlz/client/OverlayService.java"
-native_cpp = app / "src/main/cpp/wlzclient.cpp"
-manifest = app / "src/main/AndroidManifest.xml"
-styles = app / "src/main/res/values/styles.xml"
+APP = Path("app")
+JAVA = APP / "src/main/java/com/wlz/client"
+CPP = APP / "src/main/cpp"
+RES = APP / "src/main/res/drawable"
+VALUES = APP / "src/main/res/values"
 
-def copy(src_name: str, dst: Path):
-    src = Path("patch") / src_name
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(src, dst)
+def copy(name: str, dest: Path):
+    src = Path("patch") / name
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(src, dest)
 
-copy("MainActivity.java", main)
-copy("OverlayService.java", overlay)
-copy("wlzclient.cpp", native_cpp)
-copy("AndroidManifest.xml", manifest)
-copy("styles.xml", styles)
+copy("build.gradle", APP / "build.gradle")
+copy("MainActivity.java", JAVA / "MainActivity.java")
+copy("WlzModuleManager.java", JAVA / "WlzModuleManager.java")
+copy("WlzRuntimeBridge.java", JAVA / "WlzRuntimeBridge.java")
+copy("WlzPreloadService.java", JAVA / "WlzPreloadService.java")
+copy("WlzOverlayController.java", JAVA / "WlzOverlayController.java")
+copy("wlzclient.cpp", CPP / "wlzclient.cpp")
+copy("CMakeLists.txt", CPP / "CMakeLists.txt")
+copy("AndroidManifest.xml", APP / "src/main/AndroidManifest.xml")
+copy("styles.xml", VALUES / "styles.xml")
+copy("wlz_icon.xml", RES / "wlz_icon.xml")
+copy("wlz_splash.xml", RES / "wlz_splash.xml")
 
-res = app / "src/main/res/drawable"
-res.mkdir(parents=True, exist_ok=True)
-copy("wlz_icon.xml", res / "wlz_icon.xml")
-copy("wlz_splash.xml", res / "wlz_splash.xml")
-
-print("WLZ v0.5 UI + overlay + launcher patch applied")
+print("WLZ 0.6 architecture patch applied")
