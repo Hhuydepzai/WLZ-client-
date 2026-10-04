@@ -37,3 +37,6 @@ The module manager and native runtime are therefore a clean integration layer fo
 ## Build
 
 Requires Android SDK 35, JDK 17 and Gradle 8.7. GitHub Actions is included.
+
+
+<!-- WLZ 0.7 controls: in-app ClickGUI + OTG key mapping; no overlay permission. -->
