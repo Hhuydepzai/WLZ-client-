@@ -423,26 +423,27 @@ public final class MainActivity extends Activity {
         return t;
     }
 
-    private FrameLayout.LayoutParams centered(int w, int h) {
+    private LinearLayout.LayoutParams centered(int w, int h) {
         return centered(w, h, 0);
     }
 
-    private FrameLayout.LayoutParams centered(int w, int h, int top) {
-        FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(w, h, Gravity.CENTER_HORIZONTAL);
+    private LinearLayout.LayoutParams centered(int w, int h, int top) {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(w, h);
+        p.gravity = Gravity.CENTER_HORIZONTAL;
         p.topMargin = dp(top);
         return p;
     }
 
-    private FrameLayout.LayoutParams lp(int w, int h) {
-        return new FrameLayout.LayoutParams(w, h);
+    private LinearLayout.LayoutParams lp(int w, int h) {
+        return new LinearLayout.LayoutParams(w, h);
     }
 
-    private FrameLayout.LayoutParams top(int margin) {
-        return top(margin, -2);
+    private LinearLayout.LayoutParams top(int margin) {
+        return new LinearLayout.LayoutParams(-1, dp(margin));
     }
 
-    private FrameLayout.LayoutParams top(int margin, int height) {
-        FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(-1, height);
+    private LinearLayout.LayoutParams top(int margin, int height) {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, height < 0 ? -2 : height);
         p.topMargin = dp(margin);
         return p;
     }
