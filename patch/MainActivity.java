@@ -351,6 +351,17 @@ public final class MainActivity extends Activity {
         Toast.makeText(this, "WLZ floating shortcut đã khởi động.", Toast.LENGTH_SHORT).show();
     }
 
+    private void startClientService() {
+        Intent intent = new Intent(this, WlzPreloadService.class)
+                .setAction(WlzPreloadService.ACTION_START_CLIENT);
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(intent);
+            else startService(intent);
+        } catch (Throwable e) {
+            Toast.makeText(this, "Không thể khởi động WLZ runtime.", Toast.LENGTH_SHORT).show();
+        }
+    }
+
     private void showOverlayService() {
         Intent intent = new Intent(this, WlzPreloadService.class)
                 .setAction(WlzPreloadService.ACTION_SHOW_OVERLAY);
