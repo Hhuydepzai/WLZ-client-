@@ -1,5 +1,9 @@
 name: Build WLZ Client
 
+concurrency:
+  group: wlz-build
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
