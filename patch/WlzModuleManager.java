@@ -27,7 +27,8 @@ public final class WlzModuleManager {
         return prefs(context).getInt("param_" + key, fallback);
     }
 
-    public static void setParam(int key, int value) {
+    public static void setParam(Context context, int key, int value) {
+        if (key >= 0) prefs(context).edit().putInt("param_" + key, value).apply();
         try {
             WlzRuntimeBridge.nativeSetParam(key, value);
         } catch (Throwable ignored) {
