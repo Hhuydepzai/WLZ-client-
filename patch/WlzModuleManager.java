@@ -2,8 +2,10 @@ package com.wlz.client;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.util.Log;
 
 public final class WlzModuleManager {
+    private static final String TAG = "WLZRuntime";
     private static final String PREFS = "wlz_settings";
     private static final int MODULE_COUNT = 9;
     private WlzModuleManager() {}
@@ -18,8 +20,8 @@ public final class WlzModuleManager {
         prefs(context).edit().putBoolean("m_" + index, enabled).apply();
         try {
             WlzRuntimeBridge.nativeSetModule(index, enabled);
-        } catch (Throwable ignored) {
-            // Native runtime is optional until the game-side runtime is available.
+        } catch (Throwable e) {
+            Log.w(TAG, "nativeSetModule unavailable for index=" + index, e);
         }
     }
 
@@ -31,7 +33,8 @@ public final class WlzModuleManager {
         if (key >= 0) prefs(context).edit().putInt("param_" + key, value).apply();
         try {
             WlzRuntimeBridge.nativeSetParam(key, value);
-        } catch (Throwable ignored) {
+        } catch (Throwable e) {
+            Log.w(TAG, "nativeSetParam unavailable for key=" + key, e);
         }
     }
 
@@ -42,7 +45,8 @@ public final class WlzModuleManager {
                 boolean enabled = isModuleEnabled(context, i);
                 WlzRuntimeBridge.nativeSetModule(i, enabled);
             }
-        } catch (Throwable ignored) {
+        } catch (Throwable e) {
+            Log.w(TAG, "native runtime initialization unavailable", e);
         }
     }
 
