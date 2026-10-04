@@ -348,9 +348,9 @@ public final class MainActivity extends Activity {
                 .putInt("texture_colors", colors)
                 .apply();
         WlzModuleManager.setModuleEnabled(this, 8, true);
-        WlzModuleManager.setParam(3, level);
-        WlzModuleManager.setParam(4, removeEffects ? 1 : 0);
-        WlzModuleManager.setParam(5, colors);
+        WlzModuleManager.setParam(this, 3, level);
+        WlzModuleManager.setParam(this, 4, removeEffects ? 1 : 0);
+        WlzModuleManager.setParam(this, 5, colors);
     }
 
     private String profileName(int level) {
@@ -368,7 +368,7 @@ public final class MainActivity extends Activity {
         try {
             startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED));
             prefs.edit().putBoolean("wlz_auto_overlay", true).apply();
-            handler.postDelayed(this::startClientService, 1300L);
+            startClientService();
         } catch (Throwable e) {
             Toast.makeText(this, "Không thể mở Minecraft.", Toast.LENGTH_LONG).show();
         }
@@ -389,7 +389,8 @@ public final class MainActivity extends Activity {
     }
 
     private void startClientService() {
-        Intent intent = new Intent(this, WlzPreloadService.class);
+        Intent intent = new Intent(this, WlzPreloadService.class)
+                .setAction(WlzPreloadService.ACTION_START_CLIENT);
         try {
             if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(intent);
             else startService(intent);
