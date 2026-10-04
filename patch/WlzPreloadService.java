@@ -42,27 +42,29 @@ public final class WlzPreloadService extends Service {
     }
 
     private void launchMinecraftThenOverlay() {
-        if (!Settings.canDrawOverlays(this)) {
-            Log.w("WLZRuntime", "Overlay permission missing; runtime stopped");
-            stopSelf();
-            return;
-        }
-
         Intent minecraft = getPackageManager().getLaunchIntentForPackage("com.mojang.minecraftpe");
         if (minecraft == null) {
-            showOverlay();
+            Log.w("WLZRuntime", "Minecraft package not installed");
+            stopSelf();
             return;
         }
 
         try {
             minecraft.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
             startActivity(minecraft);
-        } catch (Throwable ignored) {
-            // Keep runtime alive even when Minecraft cannot be launched.
+        } catch (Throwable e) {
+            Log.e("WLZRuntime", "Minecraft launch failed", e);
+            stopSelf();
+            return;
         }
 
         handler.removeCallbacksAndMessages(null);
-        handler.postDelayed(this::showOverlay, OVERLAY_DELAY_MS);
+        if (Settings.canDrawOverlays(this)) {
+            handler.postDelayed(this::showOverlay, OVERLAY_DELAY_MS);
+        } else {
+            Log.i("WLZRuntime", "Overlay permission missing; Minecraft launched without floating shortcut");
+            handler.postDelayed(this::stopSelf, OVERLAY_DELAY_MS);
+        }
     }
 
     private void showOverlay() {
