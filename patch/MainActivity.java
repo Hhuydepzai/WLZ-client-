@@ -45,8 +45,6 @@ public final class MainActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private SharedPreferences prefs;
     private TextView status;
-    private TextView stage;
-    private View splash;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -57,9 +55,12 @@ public final class MainActivity extends Activity {
         prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         defineModules();
 
-        splash = buildTechSplash();
-        setContentView(splash);
-        runSplashSequence();
+        setContentView(buildSplash());
+        handler.postDelayed(() -> {
+            if (!isFinishing() && !isDestroyed()) {
+                setContentView(buildUi());
+            }
+        }, 700L);
     }
 
     @Override
@@ -68,82 +69,44 @@ public final class MainActivity extends Activity {
         super.onDestroy();
     }
 
-    private void runSplashSequence() {
-        final String[] steps = {
-                "BOOTSTRAP CORE",
-                "CHECKING RUNTIME",
-                "LOADING MODULES",
-                "PREPARING OVERLAY",
-                "WLZ CLIENT READY"
-        };
-
-        final int[] delays = {0, 260, 520, 780, 1040};
-        for (int i = 0; i < steps.length; i++) {
-            final int idx = i;
-            handler.postDelayed(() -> {
-                if (stage != null) {
-                    stage.setText(steps[idx]);
-                    stage.setTextColor(idx == steps.length - 1 ? GREEN : ORANGE_LIGHT);
-                }
-                if (idx == steps.length - 1 && splash != null) {
-                    handler.postDelayed(() -> {
-                        if (!isFinishing() && !isDestroyed()) setContentView(buildUi());
-                    }, 220L);
-                }
-            }, delays[i]);
-        }
-    }
-
-    private View buildTechSplash() {
+    private View buildSplash() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER);
-        root.setPadding(dp(25), dp(30), dp(25), dp(30));
+        root.setPadding(dp(28), dp(28), dp(28), dp(28));
         root.setBackgroundColor(BG);
-
-        TextView statusTop = text("WLZ // MOBILE CLIENT", 10, ORANGE_LIGHT, true);
-        statusTop.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
-        statusTop.setGravity(Gravity.CENTER);
-        root.addView(statusTop, lp(-1, -2));
 
         ImageView icon = new ImageView(this);
         icon.setImageResource(R.drawable.wlz_icon);
         icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(dp(142), dp(142));
+        LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(dp(118), dp(118));
         ilp.gravity = Gravity.CENTER_HORIZONTAL;
-        ilp.topMargin = dp(18);
         root.addView(icon, ilp);
 
-        TextView title = text("WLZ", 38, TEXT, true);
-        title.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        TextView title = text("WLZ Client", 27, TEXT, true);
         title.setGravity(Gravity.CENTER);
-        root.addView(title, topCentered(10));
+        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        root.addView(title, topCentered(14));
 
-        TextView subtitle = text("CLIENT INITIALIZATION", 11, MUTED, true);
-        subtitle.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        TextView subtitle = text("Play Smarter - Not Harder", 11, MUTED, false);
         subtitle.setGravity(Gravity.CENTER);
-        root.addView(subtitle, topCentered(3));
+        root.addView(subtitle, topCentered(4));
 
-        TextView line = text("━━━━━━━━━━━━━━━━━━━━━━━━", 12, ORANGE, false);
-        line.setGravity(Gravity.CENTER);
-        root.addView(line, topCentered(18));
+        View line = new View(this);
+        line.setBackgroundColor(ORANGE);
+        LinearLayout.LayoutParams lineLp = new LinearLayout.LayoutParams(dp(150), dp(2));
+        lineLp.gravity = Gravity.CENTER_HORIZONTAL;
+        lineLp.topMargin = dp(18);
+        root.addView(line, lineLp);
 
-        stage = text("BOOTSTRAP CORE", 10, ORANGE_LIGHT, true);
-        stage.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
-        stage.setGravity(Gravity.CENTER);
-        root.addView(stage, topCentered(10));
+        TextView loading = text("Đang khởi động…", 10, ORANGE_LIGHT, true);
+        loading.setGravity(Gravity.CENTER);
+        root.addView(loading, topCentered(14));
 
-        TextView info = text(
-                "CORE      [ OK ]\nRENDER    [ LINK READY ]\nINPUT     [ LINK READY ]\nMODULES   [ LOADABLE ]",
-                10, MUTED, false);
-        info.setTypeface(Typeface.MONOSPACE);
-        info.setGravity(Gravity.CENTER);
-        root.addView(info, topCentered(14));
-
-        TextView footer = text("ARM64  •  ANDROID 9+  •  WLZ RUNTIME", 9, MUTED, true);
-        footer.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        TextView footer = text("ANDROID 9+  •  ARM64-V8A", 8, MUTED, true);
         footer.setGravity(Gravity.CENTER);
-        root.addView(footer, topCentered(24));
+        root.addView(footer, topCentered(22));
+
         return root;
     }
 
@@ -194,7 +157,7 @@ public final class MainActivity extends Activity {
         scroll.addView(list);
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
-        TextView foot = text("WLZ CLIENT 0.6  •  ARM64  •  ORANGE / GRAPHITE", 9, MUTED, false);
+        TextView foot = text("WLZ CLIENT 0.6.2  •  ARM64  •  ORANGE / GRAPHITE", 9, MUTED, false);
         foot.setTypeface(Typeface.MONOSPACE);
         foot.setGravity(Gravity.CENTER);
         foot.setPadding(0, dp(8), 0, 0);
@@ -214,7 +177,7 @@ public final class MainActivity extends Activity {
         title.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
         h.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
 
-        TextView chip = text("0.6", 10, ORANGE_LIGHT, true);
+        TextView chip = text("0.6.2", 10, ORANGE_LIGHT, true);
         chip.setGravity(Gravity.CENTER);
         chip.setPadding(dp(10), dp(6), dp(10), dp(6));
         chip.setBackground(round(ORANGE_DARK, ORANGE, 1, 18));
@@ -231,7 +194,7 @@ public final class MainActivity extends Activity {
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
         top.addView(text("WLZ RUNTIME", 11, ORANGE_LIGHT, true), new LinearLayout.LayoutParams(0, -2, 1));
-        TextView badge = text("PRELOAD", 9, ORANGE_LIGHT, true);
+        TextView badge = text("READY", 9, ORANGE_LIGHT, true);
         badge.setPadding(dp(8), dp(4), dp(8), dp(4));
         badge.setBackground(round(ORANGE_DARK, ORANGE, 1, 12));
         top.addView(badge, lp(-2, -2));
@@ -246,7 +209,7 @@ public final class MainActivity extends Activity {
         card.addView(status, top(5));
 
         TextView hint = text(
-                "Kiến trúc runtime WLZ độc lập: launcher + preload service + module manager + floating shortcut.",
+                "Launcher WLZ độc lập với preload service, module manager và floating shortcut.",
                 9, MUTED, false);
         card.addView(hint, top(7));
         return card;
@@ -365,10 +328,13 @@ public final class MainActivity extends Activity {
             Toast.makeText(this, "Chưa cài Minecraft Bedrock.", Toast.LENGTH_LONG).show();
             return;
         }
+
         try {
             startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED));
-            prefs.edit().putBoolean("wlz_auto_overlay", true).apply();
-            startClientService();
+
+            if (Settings.canDrawOverlays(this)) {
+                showOverlayService();
+            }
         } catch (Throwable e) {
             Toast.makeText(this, "Không thể mở Minecraft.", Toast.LENGTH_LONG).show();
         }
@@ -384,18 +350,19 @@ public final class MainActivity extends Activity {
             }
             return;
         }
-        startClientService();
-        Toast.makeText(this, "WLZ runtime + floating shortcut đã khởi động.", Toast.LENGTH_SHORT).show();
+
+        showOverlayService();
+        Toast.makeText(this, "WLZ floating shortcut đã khởi động.", Toast.LENGTH_SHORT).show();
     }
 
-    private void startClientService() {
+    private void showOverlayService() {
         Intent intent = new Intent(this, WlzPreloadService.class)
-                .setAction(WlzPreloadService.ACTION_START_CLIENT);
+                .setAction(WlzPreloadService.ACTION_SHOW_OVERLAY);
         try {
             if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(intent);
             else startService(intent);
         } catch (Throwable e) {
-            Toast.makeText(this, "Không thể khởi động WLZ runtime.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Không thể khởi động WLZ overlay.", Toast.LENGTH_SHORT).show();
         }
     }
 
