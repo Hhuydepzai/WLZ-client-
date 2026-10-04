@@ -1,9 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-
     <application
         android:allowBackup="false"
         android:label="WLZ Client"
@@ -12,14 +8,10 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
-        <service
-            android:name=".WlzPreloadService"
+        <activity
+            android:name=".WlzControlEditorActivity"
             android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="WLZ preload runtime and floating client controls" />
-        </service>
+            android:screenOrientation="portrait" />
 
         <activity
             android:name=".MainActivity"
