@@ -144,7 +144,7 @@ public final class MainActivity extends Activity {
         root.addView(launchActions(), top(10));
         root.addView(fixLagCard(), top(10));
 
-        TextView heading = text("MODULES  //  %02d".formatted(modules.size()), 13, TEXT, true);
+        TextView heading = text("MODULES  //  " + String.format("%02d", modules.size()), 13, TEXT, true);
         heading.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
         heading.setPadding(dp(2), dp(15), 0, dp(8));
         root.addView(heading, lp(-1, -2));
