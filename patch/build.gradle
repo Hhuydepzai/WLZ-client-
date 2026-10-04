@@ -1,0 +1,42 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.wlz.client'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.wlz.client'
+        minSdk 28
+        targetSdk 35
+        versionCode 6
+        versionName '0.6.0'
+
+        ndk { abiFilters 'arm64-v8a' }
+
+        externalNativeBuild {
+            cmake { cppFlags '-std=c++17 -O2 -ffunction-sections -fdata-sections' }
+        }
+    }
+
+    buildTypes {
+        debug { minifyEnabled false }
+        release {
+            minifyEnabled false
+            ndk { debugSymbolLevel 'none' }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    externalNativeBuild {
+        cmake { path 'src/main/cpp/CMakeLists.txt' }
+    }
+
+    packaging {
+        jniLibs { useLegacyPackaging true }
+        resources { excludes += ['/META-INF/{AL2.0,LGPL2.1}'] }
+    }
+}
