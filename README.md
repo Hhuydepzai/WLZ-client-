@@ -1,9 +1,10 @@
-# WLZ Client v0.6
+# WLZ Client v0.6.4
 
 - Android 9+ (minSdk 28)
 - arm64-v8a first
 - Minecraft target package: `com.mojang.minecraftpe`
-- Tech-style WLZ splash and orange/graphite control UI.
+- Simple WLZ splash and orange/graphite control UI.
+- Distinct WLZ monogram icon for launcher, splash and floating shortcut.
 - WLZ preload service with persistent floating circular shortcut.
 - WLZ module manager and native runtime bridge.
 - Modules and Fix Lag profiles are persisted locally.
