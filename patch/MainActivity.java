@@ -157,7 +157,7 @@ public final class MainActivity extends Activity {
         scroll.addView(list);
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
-        TextView foot = text("WLZ CLIENT 0.6.3  •  ARM64  •  ORANGE / GRAPHITE", 9, MUTED, false);
+        TextView foot = text("WLZ CLIENT 0.6.4  •  ARM64  •  ORANGE / GRAPHITE", 9, MUTED, false);
         foot.setTypeface(Typeface.MONOSPACE);
         foot.setGravity(Gravity.CENTER);
         foot.setPadding(0, dp(8), 0, 0);
@@ -177,7 +177,7 @@ public final class MainActivity extends Activity {
         title.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
         h.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
 
-        TextView chip = text("0.6.3", 10, ORANGE_LIGHT, true);
+        TextView chip = text("0.6.4", 10, ORANGE_LIGHT, true);
         chip.setGravity(Gravity.CENTER);
         chip.setPadding(dp(10), dp(6), dp(10), dp(6));
         chip.setBackground(round(ORANGE_DARK, ORANGE, 1, 18));
