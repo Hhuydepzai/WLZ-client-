@@ -95,6 +95,13 @@ public final class MainActivity extends Activity {
         return splash;
     }
 
+    private LinearLayout.LayoutParams topCentered(int margin) {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
+        p.gravity = Gravity.CENTER_HORIZONTAL;
+        p.topMargin = dp(margin);
+        return p;
+    }
+
     private void buildHome() {
         root.removeAllViews();
 
