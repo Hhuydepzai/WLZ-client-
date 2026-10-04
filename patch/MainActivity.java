@@ -53,7 +53,8 @@ public final class MainActivity extends Activity {
 
         root = new FrameLayout(this);
         root.setBackgroundColor(BG);
-        setContentView(buildSplash());
+        setContentView(root);
+        root.addView(buildSplash(), new FrameLayout.LayoutParams(-1, -1));
         root.postDelayed(new Runnable() {
             @Override public void run() {
                 if (!isFinishing() && !isDestroyed()) {
