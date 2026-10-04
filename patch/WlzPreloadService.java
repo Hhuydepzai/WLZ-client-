@@ -9,13 +9,14 @@ import android.content.Intent;
 import android.os.Build;
 import android.os.IBinder;
 import android.provider.Settings;
+import android.util.Log;
 
 public final class WlzPreloadService extends Service {
     public static final String ACTION_START_CLIENT = "com.wlz.client.action.START_CLIENT";
     public static final String ACTION_SHOW_OVERLAY = "com.wlz.client.action.SHOW_OVERLAY";
 
     private static final String CHANNEL = "wlz_runtime";
-    private static final long OVERLAY_DELAY_MS = 1700L;
+    private static final long OVERLAY_DELAY_MS = 2400L;
 
     private WlzOverlayController overlay;
     private final android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
@@ -42,6 +43,7 @@ public final class WlzPreloadService extends Service {
 
     private void launchMinecraftThenOverlay() {
         if (!Settings.canDrawOverlays(this)) {
+            Log.w("WLZRuntime", "Overlay permission missing; runtime stopped");
             stopSelf();
             return;
         }
