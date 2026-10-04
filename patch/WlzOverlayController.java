@@ -207,9 +207,9 @@ public final class WlzOverlayController {
                 .apply();
 
         WlzModuleManager.setModuleEnabled(context, 8, true);
-        WlzModuleManager.setParam(3, level);
-        WlzModuleManager.setParam(4, removeEffects ? 1 : 0);
-        WlzModuleManager.setParam(5, colors);
+        WlzModuleManager.setParam(context, 3, level);
+        WlzModuleManager.setParam(context, 4, removeEffects ? 1 : 0);
+        WlzModuleManager.setParam(context, 5, colors);
         hidePanel();
     }
 
