@@ -114,28 +114,14 @@ public final class MainActivity extends Activity {
         });
         page.addView(start, top(10, dp(54)));
 
-        LinearLayout mini = new LinearLayout(this);
-        mini.addView(infoButton("●  CLIENT SẴN SÀNG"), new LinearLayout.LayoutParams(0, dp(42), 1));
-        Button controls = infoButton("⌘  MAP PHÍM");
-        controls.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) {
-                startActivity(new Intent(MainActivity.this, WlzControlEditorActivity.class));
-            }
-        });
-        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(0, dp(42), 0.92f);
-        cp.leftMargin = dp(7);
-        mini.addView(controls, cp);
-        page.addView(mini, top(8));
-
-        TextView hint = text("Các chức năng nằm trong nút WLZ tròn. Không còn hàng switch nằm ngoài màn hình.", 9, MUTED, false);
+        TextView hint = text("WLZ • module control + Fix Lag nằm trong nút tròn.", 9, MUTED, false);
         hint.setGravity(Gravity.CENTER);
-        page.addView(hint, top(10));
+        page.addView(hint, top(8));
 
         ScrollView scroll = new ScrollView(this);
         LinearLayout spacer = new LinearLayout(this);
         spacer.setOrientation(LinearLayout.VERTICAL);
         spacer.addView(runtimeInfo(), lp(-1, -2));
-        spacer.addView(fixLagCard(), top(8));
         spacer.addView(footer(), top(10));
         scroll.addView(spacer);
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
@@ -273,7 +259,7 @@ public final class MainActivity extends Activity {
     }
 
     private void createCircle() {
-        Button circle = new Button(this);
+        final Button circle = new Button(this);
         circle.setText("WLZ");
         circle.setTextColor(TEXT);
         circle.setTextSize(12);
@@ -282,15 +268,43 @@ public final class MainActivity extends Activity {
         circle.setBackground(circleBackground());
         circle.setContentDescription("WLZ ClickGUI");
 
-        circle.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) {
-                clickGui.setVisibility(clickGui.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
+        final FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(dp(62), dp(62), Gravity.LEFT | Gravity.TOP);
+        p.leftMargin = prefs.getInt("circle_x", dp(18));
+        p.topMargin = prefs.getInt("circle_y", dp(120));
+
+        circle.setOnTouchListener(new View.OnTouchListener() {
+            float downX, downY;
+            int startX, startY;
+            boolean moved;
+            @Override public boolean onTouch(View v, android.view.MotionEvent e) {
+                if (e.getActionMasked() == android.view.MotionEvent.ACTION_DOWN) {
+                    downX = e.getRawX();
+                    downY = e.getRawY();
+                    startX = p.leftMargin;
+                    startY = p.topMargin;
+                    moved = false;
+                    return true;
+                }
+                if (e.getActionMasked() == android.view.MotionEvent.ACTION_MOVE) {
+                    int nx = startX + (int)(e.getRawX() - downX);
+                    int ny = startY + (int)(e.getRawY() - downY);
+                    nx = Math.max(0, Math.min(nx, root.getWidth() - v.getWidth()));
+                    ny = Math.max(0, Math.min(ny, root.getHeight() - v.getHeight()));
+                    p.leftMargin = nx;
+                    p.topMargin = ny;
+                    v.setLayoutParams(p);
+                    prefs.edit().putInt("circle_x", nx).putInt("circle_y", ny).apply();
+                    moved = true;
+                    return true;
+                }
+                if (e.getActionMasked() == android.view.MotionEvent.ACTION_UP) {
+                    if (!moved) clickGui.setVisibility(clickGui.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
+                    return true;
+                }
+                return true;
             }
         });
 
-        FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(dp(62), dp(62), Gravity.RIGHT | Gravity.BOTTOM);
-        p.rightMargin = dp(18);
-        p.bottomMargin = dp(26);
         root.addView(circle, p);
     }
 
@@ -331,6 +345,7 @@ public final class MainActivity extends Activity {
         }
         scroll.addView(list);
         panel.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        panel.addView(fixLagCard(), top(7));
 
         Button close = infoButton("ĐÓNG");
         close.setOnClickListener(new View.OnClickListener() {
