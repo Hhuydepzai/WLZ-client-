@@ -29,14 +29,9 @@ public final class WlzPreloadService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        String action = intent == null ? ACTION_START_CLIENT : intent.getAction();
+        String action = intent == null ? ACTION_SHOW_OVERLAY : intent.getAction();
 
-        if (ACTION_SHOW_OVERLAY.equals(action)) {
-            showOverlay();
-            return START_STICKY;
-        }
-
-        if (ACTION_START_CLIENT.equals(action) || action == null) {
+        if (ACTION_START_CLIENT.equals(action)) {
             launchMinecraftThenOverlay();
             return START_STICKY;
         }
@@ -61,7 +56,7 @@ public final class WlzPreloadService extends Service {
             minecraft.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
             startActivity(minecraft);
         } catch (Throwable ignored) {
-            // Keep the runtime alive even when Minecraft cannot be launched.
+            // Keep runtime alive even when Minecraft cannot be launched.
         }
 
         handler.removeCallbacksAndMessages(null);
@@ -98,7 +93,7 @@ public final class WlzPreloadService extends Service {
 
         builder.setSmallIcon(android.R.drawable.ic_menu_manage)
                 .setContentTitle("WLZ Client")
-                .setContentText("WLZ preload runtime đang chạy")
+                .setContentText("WLZ floating runtime đang chạy")
                 .setContentIntent(pi)
                 .setOngoing(true);
 
