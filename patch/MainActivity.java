@@ -7,15 +7,12 @@ import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
-import android.net.Uri;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
-import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
+import android.view.Window;
 import android.widget.Button;
-import android.widget.CompoundButton;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -29,7 +26,6 @@ import java.util.Map;
 public final class MainActivity extends Activity {
     private static final String MC_PACKAGE = "com.mojang.minecraftpe";
     private static final String PREFS = "wlz_settings";
-
     private static final int BG = Color.rgb(7, 9, 12);
     private static final int PANEL = Color.rgb(15, 18, 23);
     private static final int PANEL_2 = Color.rgb(20, 24, 30);
@@ -39,130 +35,114 @@ public final class MainActivity extends Activity {
     private static final int ORANGE_DARK = Color.rgb(77, 34, 5);
     private static final int TEXT = Color.rgb(242, 245, 249);
     private static final int MUTED = Color.rgb(145, 154, 166);
-    private static final int GREEN = Color.rgb(65, 210, 136);
 
-    private final Map<String, ModuleDef> modules = new LinkedHashMap<>();
-    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Map<String, ModuleDef> modules = new LinkedHashMap<String, ModuleDef>();
     private SharedPreferences prefs;
-    private TextView status;
+    private FrameLayout root;
+    private View clickGui;
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
-        getWindow().setStatusBarColor(BG);
-        getWindow().setNavigationBarColor(BG);
+        Window w = getWindow();
+        w.setStatusBarColor(BG);
+        w.setNavigationBarColor(BG);
 
         prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         defineModules();
 
+        root = new FrameLayout(this);
+        root.setBackgroundColor(BG);
         setContentView(buildSplash());
-        handler.postDelayed(() -> {
-            if (!isFinishing() && !isDestroyed()) {
-                setContentView(buildUi());
+        root.postDelayed(new Runnable() {
+            @Override public void run() {
+                if (!isFinishing() && !isDestroyed()) {
+                    buildHome();
+                }
             }
-        }, 700L);
-    }
-
-    @Override
-    protected void onDestroy() {
-        handler.removeCallbacksAndMessages(null);
-        super.onDestroy();
+        }, 520L);
     }
 
     private View buildSplash() {
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setGravity(Gravity.CENTER);
-        root.setPadding(dp(28), dp(28), dp(28), dp(28));
-        root.setBackgroundColor(BG);
+        LinearLayout splash = new LinearLayout(this);
+        splash.setOrientation(LinearLayout.VERTICAL);
+        splash.setGravity(Gravity.CENTER);
+        splash.setPadding(dp(28), dp(28), dp(28), dp(28));
+        splash.setBackgroundColor(BG);
 
         ImageView icon = new ImageView(this);
         icon.setImageResource(R.drawable.wlz_icon);
-        icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(dp(118), dp(118));
-        ilp.gravity = Gravity.CENTER_HORIZONTAL;
-        root.addView(icon, ilp);
+        icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        splash.addView(icon, centered(dp(112), dp(112)));
 
         TextView title = text("WLZ Client", 27, TEXT, true);
         title.setGravity(Gravity.CENTER);
-        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        root.addView(title, topCentered(14));
+        splash.addView(title, topCentered(13));
 
-        TextView subtitle = text("Play Smarter - Not Harder", 11, MUTED, false);
-        subtitle.setGravity(Gravity.CENTER);
-        root.addView(subtitle, topCentered(4));
+        TextView sub = text("Play Smarter - Not Harder", 11, MUTED, false);
+        sub.setGravity(Gravity.CENTER);
+        splash.addView(sub, topCentered(4));
 
         View line = new View(this);
         line.setBackgroundColor(ORANGE);
-        LinearLayout.LayoutParams lineLp = new LinearLayout.LayoutParams(dp(150), dp(2));
-        lineLp.gravity = Gravity.CENTER_HORIZONTAL;
-        lineLp.topMargin = dp(18);
-        root.addView(line, lineLp);
+        splash.addView(line, centered(dp(120), dp(2), 17));
 
         TextView loading = text("Đang khởi động…", 10, ORANGE_LIGHT, true);
         loading.setGravity(Gravity.CENTER);
-        root.addView(loading, topCentered(14));
+        splash.addView(loading, topCentered(12));
 
-        TextView footer = text("ANDROID 9+  •  ARM64-V8A", 8, MUTED, true);
-        footer.setGravity(Gravity.CENTER);
-        root.addView(footer, topCentered(22));
-
-        return root;
+        return splash;
     }
 
-    private LinearLayout.LayoutParams topCentered(int margin) {
-        LinearLayout.LayoutParams p = lp(-1, -2);
-        p.topMargin = dp(margin);
-        return p;
-    }
+    private void buildHome() {
+        root.removeAllViews();
 
-    private void defineModules() {
-        modules.clear();
-        add("Zoom", "Phóng camera bằng nút giữ", 0);
-        add("FreeLook", "Xoay góc nhìn độc lập", 1);
-        add("Ném đồ", "Drop nhanh item đang chọn", 2);
-        add("Unlock FPS", "Thiết lập mục tiêu FPS", 3);
-        add("Fullbright", "Thiết lập độ sáng", 4);
-        add("Hitbox", "Hiện vùng va chạm entity", 5);
-        add("AutoSprint", "Tự chạy khi di chuyển", 6);
-        add("Snaplook", "Xoay nhanh theo góc đặt sẵn", 7);
-        add("FPS Counter", "Hiện bộ đếm FPS", 8);
-    }
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setPadding(dp(15), dp(13), dp(15), dp(11));
+        page.setBackgroundColor(BG);
 
-    private void add(String name, String desc, int index) {
-        modules.put(name, new ModuleDef(name, desc, index));
-    }
+        page.addView(header(), lp(-1, -2));
+        page.addView(hero(), top(11));
 
-    private View buildUi() {
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(16), dp(13), dp(16), dp(10));
-        root.setBackgroundColor(BG);
+        Button start = primaryButton("▶  VÀO MINECRAFT", ORANGE);
+        start.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                launchMinecraft();
+            }
+        });
+        page.addView(start, top(10, dp(54)));
 
-        root.addView(header(), lp(-1, -2));
-        root.addView(runtimeCard(), top(12));
-        root.addView(launchActions(), top(10));
-        root.addView(fixLagCard(), top(10));
+        LinearLayout mini = new LinearLayout(this);
+        mini.addView(infoButton("●  CLIENT SẴN SÀNG"), new LinearLayout.LayoutParams(0, dp(42), 1));
+        Button controls = infoButton("⌘  MAP PHÍM");
+        controls.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                startActivity(new Intent(MainActivity.this, WlzControlEditorActivity.class));
+            }
+        });
+        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(0, dp(42), 0.92f);
+        cp.leftMargin = dp(7);
+        mini.addView(controls, cp);
+        page.addView(mini, top(8));
 
-        TextView heading = text("MODULES  //  " + String.format("%02d", modules.size()), 13, TEXT, true);
-        heading.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
-        heading.setPadding(dp(2), dp(15), 0, dp(8));
-        root.addView(heading, lp(-1, -2));
+        TextView hint = text("Các chức năng nằm trong nút WLZ tròn. Không còn hàng switch nằm ngoài màn hình.", 9, MUTED, false);
+        hint.setGravity(Gravity.CENTER);
+        page.addView(hint, top(10));
 
         ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
-        LinearLayout list = new LinearLayout(this);
-        list.setOrientation(LinearLayout.VERTICAL);
-        for (ModuleDef module : modules.values()) list.addView(moduleRow(module));
-        scroll.addView(list);
-        root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        LinearLayout spacer = new LinearLayout(this);
+        spacer.setOrientation(LinearLayout.VERTICAL);
+        spacer.addView(runtimeInfo(), lp(-1, -2));
+        spacer.addView(fixLagCard(), top(8));
+        spacer.addView(footer(), top(10));
+        scroll.addView(spacer);
+        page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
-        TextView foot = text("WLZ CLIENT 0.6.4  •  ARM64  •  ORANGE / GRAPHITE", 9, MUTED, false);
-        foot.setTypeface(Typeface.MONOSPACE);
-        foot.setGravity(Gravity.CENTER);
-        foot.setPadding(0, dp(8), 0, 0);
-        root.addView(foot, lp(-1, -2));
-        return root;
+        root.addView(page, new FrameLayout.LayoutParams(-1, -1));
+
+        createCircle();
+        createClickGui();
     }
 
     private View header() {
@@ -173,229 +153,264 @@ public final class MainActivity extends Activity {
         logo.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
         h.addView(logo, lp(-2, -2));
 
-        TextView title = text("  CLIENT / CONTROL", 15, TEXT, true);
-        title.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        TextView title = text("  CLIENT", 15, TEXT, true);
         h.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
 
-        TextView chip = text("0.6.4", 10, ORANGE_LIGHT, true);
-        chip.setGravity(Gravity.CENTER);
-        chip.setPadding(dp(10), dp(6), dp(10), dp(6));
-        chip.setBackground(round(ORANGE_DARK, ORANGE, 1, 18));
-        h.addView(chip, lp(-2, -2));
+        TextView badge = text("0.6.4", 10, ORANGE_LIGHT, true);
+        badge.setGravity(Gravity.CENTER);
+        badge.setPadding(dp(10), dp(5), dp(10), dp(5));
+        badge.setBackground(round(ORANGE_DARK, ORANGE, 1, 16));
+        h.addView(badge, lp(-2, -2));
         return h;
     }
 
-    private View runtimeCard() {
+    private View hero() {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(14), dp(13), dp(14), dp(13));
-        card.setBackground(round(PANEL, STROKE, 1, 16));
+        card.setPadding(dp(15), dp(15), dp(15), dp(14));
+        card.setBackground(round(PANEL, ORANGE, 1, 17));
 
-        LinearLayout top = new LinearLayout(this);
-        top.setGravity(Gravity.CENTER_VERTICAL);
-        top.addView(text("WLZ RUNTIME", 11, ORANGE_LIGHT, true), new LinearLayout.LayoutParams(0, -2, 1));
-        TextView badge = text("READY", 9, ORANGE_LIGHT, true);
-        badge.setPadding(dp(8), dp(4), dp(8), dp(4));
-        badge.setBackground(round(ORANGE_DARK, ORANGE, 1, 12));
-        top.addView(badge, lp(-2, -2));
-        card.addView(top);
+        TextView label = text("WLZ CLIENT", 11, ORANGE_LIGHT, true);
+        card.addView(label, lp(-1, -2));
 
-        TextView title = text("Launch → Preload → Overlay", 21, TEXT, true);
-        title.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        TextView title = text("Play Smarter - Not Harder", 22, TEXT, true);
+        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         card.addView(title, top(5));
 
-        status = text("Đang kiểm tra Minecraft…", 10, MUTED, false);
-        status.setTypeface(Typeface.MONOSPACE);
-        card.addView(status, top(5));
+        TextView sub = text("Minecraft Bedrock • ARM64 • Android 9+", 10, MUTED, false);
+        card.addView(sub, top(4));
 
-        TextView hint = text(
-                "Launcher WLZ độc lập với preload service, module manager và floating shortcut.",
-                9, MUTED, false);
-        card.addView(hint, top(7));
+        TextView tiny = text("Launch → client runtime → in-game controls", 9, MUTED, false);
+        card.addView(tiny, top(8));
         return card;
     }
 
-    private View launchActions() {
-        LinearLayout row = new LinearLayout(this);
-        row.setGravity(Gravity.CENTER_VERTICAL);
+    private View runtimeInfo() {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(12), dp(11), dp(12), dp(11));
+        card.setBackground(round(PANEL_2, STROKE, 1, 14));
 
-        Button launch = actionButton("▶  CHẠY MINECRAFT", ORANGE, TEXT);
-        launch.setOnClickListener(v -> launchMinecraft());
-        row.addView(launch, new LinearLayout.LayoutParams(0, dp(52), 1));
-
-        Button runtime = actionButton("◉  BẬT CLIENT", PANEL_2, TEXT);
-        runtime.setOnClickListener(v -> activateClient());
-        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(0, dp(52), 0.68f);
-        rlp.leftMargin = dp(8);
-        row.addView(runtime, rlp);
-        return row;
+        card.addView(text("CLIENT CONTROL", 11, ORANGE_LIGHT, true), lp(-1, -2));
+        card.addView(text("Bật/tắt module từ ClickGUI WLZ.", 10, TEXT, true), top(4));
+        card.addView(text("Map phím OTG + nút cảm ứng được lưu riêng theo máy.", 9, MUTED, false), top(3));
+        return card;
     }
 
     private View fixLagCard() {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(13), dp(12), dp(13), dp(11));
-        card.setBackground(round(PANEL, STROKE, 1, 15));
+        card.setPadding(dp(12), dp(10), dp(12), dp(10));
+        card.setBackground(round(PANEL, STROKE, 1, 14));
 
-        LinearLayout head = new LinearLayout(this);
-        head.setGravity(Gravity.CENTER_VERTICAL);
-        head.addView(text("FIX LAG", 13, TEXT, true), new LinearLayout.LayoutParams(0, -2, 1));
-        TextView badge = text(profileName(prefs.getInt("lag_profile", 1)), 9, ORANGE_LIGHT, true);
-        badge.setPadding(dp(8), dp(4), dp(8), dp(4));
-        badge.setBackground(round(ORANGE_DARK, ORANGE, 1, 13));
-        head.addView(badge, lp(-2, -2));
-        card.addView(head);
-
-        card.addView(text("Chọn profile giảm tải render của WLZ.", 9, MUTED, false), top(4));
+        LinearLayout h = new LinearLayout(this);
+        h.setGravity(Gravity.CENTER_VERTICAL);
+        h.addView(text("FIX LAG", 12, TEXT, true), new LinearLayout.LayoutParams(0, -2, 1));
+        h.addView(text(profileName(prefs.getInt("lag_profile", 1)), 9, ORANGE_LIGHT, true), lp(-2, -2));
+        card.addView(h);
 
         LinearLayout levels = new LinearLayout(this);
-        String[] labels = {"NHẸ", "MẠNH", "SIÊU"};
+        final String[] labels = {"NHẸ", "MẠNH", "SIÊU"};
         int current = prefs.getInt("lag_profile", 1);
         for (int i = 1; i <= 3; i++) {
             final int level = i;
-            Button b = actionButton(labels[i - 1], level == current ? ORANGE : PANEL_2, TEXT);
-            b.setOnClickListener(v -> { applyFixProfile(level); recreate(); });
-            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(42), 1);
-            if (i > 1) p.leftMargin = dp(6);
+            Button b = infoButton(labels[i - 1]);
+            if (current == i) b.setBackground(round(ORANGE, ORANGE_LIGHT, 1, 10));
+            b.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    applyFix(level);
+                    buildHome();
+                }
+            });
+            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(37), 1);
+            if (i > 1) p.leftMargin = dp(5);
             levels.addView(b, p);
         }
-        card.addView(levels, top(8));
+        card.addView(levels, top(7));
 
         Switch effects = new Switch(this);
         effects.setText("  Xóa hiệu ứng nặng");
         effects.setTextColor(TEXT);
-        effects.setTextSize(11);
+        effects.setTextSize(10);
         effects.setChecked(prefs.getBoolean("fix_remove_effects", current >= 2));
-        effects.setOnCheckedChangeListener((CompoundButton b, boolean c) -> {
-            prefs.edit().putBoolean("fix_remove_effects", c).apply();
-            applyFixProfile(prefs.getInt("lag_profile", 1));
+        effects.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            prefs.edit().putBoolean("fix_remove_effects", isChecked).apply();
+            applyFix(prefs.getInt("lag_profile", 1));
         });
         card.addView(effects, top(2));
-
-        card.addView(text("Cấp 1: 4 màu  •  Cấp 2: 4 màu  •  Cấp 3: 3 màu", 9, MUTED, false), top(1));
         return card;
     }
 
-    private View moduleRow(ModuleDef module) {
-        LinearLayout row = new LinearLayout(this);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(12), dp(8), dp(8), dp(8));
-        row.setBackground(round(PANEL_2, STROKE, 1, 14));
-
-        LinearLayout copy = new LinearLayout(this);
-        copy.setOrientation(LinearLayout.VERTICAL);
-        copy.addView(text(module.name, 13, TEXT, true), lp(-1, -2));
-        copy.addView(text(module.desc, 9, MUTED, false), top(2));
-        row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
-
-        Switch sw = new Switch(this);
-        boolean checked = WlzModuleManager.isModuleEnabled(this, module.index);
-        sw.setChecked(checked);
-        sw.setOnCheckedChangeListener((CompoundButton b, boolean enabled) -> {
-            WlzModuleManager.setModuleEnabled(this, module.index, enabled);
-        });
-        row.addView(sw, lp(-2, -2));
-
-        LinearLayout.LayoutParams wrap = lp(-1, -2);
-        wrap.bottomMargin = dp(7);
-        row.setLayoutParams(wrap);
-        return row;
-    }
-
-    private void applyFixProfile(int level) {
-        level = Math.max(1, Math.min(3, level));
-        boolean removeEffects = prefs.getBoolean("fix_remove_effects", level >= 2);
+    private void applyFix(int level) {
+        boolean remove = prefs.getBoolean("fix_remove_effects", level >= 2);
         int colors = level >= 3 ? 3 : 4;
         prefs.edit().putInt("lag_profile", level)
-                .putBoolean("fix_remove_effects", removeEffects)
+                .putBoolean("fix_remove_effects", remove)
                 .putInt("texture_colors", colors)
                 .apply();
         WlzModuleManager.setModuleEnabled(this, 8, true);
         WlzModuleManager.setParam(this, 3, level);
-        WlzModuleManager.setParam(this, 4, removeEffects ? 1 : 0);
+        WlzModuleManager.setParam(this, 4, remove ? 1 : 0);
         WlzModuleManager.setParam(this, 5, colors);
+    }
+
+    private void defineModules() {
+        modules.clear();
+        add("Zoom", "Phóng camera", 0);
+        add("FreeLook", "Xoay góc nhìn độc lập", 1);
+        add("Ném đồ", "Drop nhanh item", 2);
+        add("Unlock FPS", "Mục tiêu FPS", 3);
+        add("Fullbright", "Tăng độ sáng", 4);
+        add("Hitbox", "Vùng va chạm", 5);
+        add("AutoSprint", "Tự chạy", 6);
+        add("Snaplook", "Xoay theo góc đặt", 7);
+        add("FPS Counter", "Bộ đếm FPS", 8);
+    }
+
+    private void add(String name, String desc, int index) {
+        modules.put(name, new ModuleDef(name, desc, index));
+    }
+
+    private void createCircle() {
+        Button circle = new Button(this);
+        circle.setText("WLZ");
+        circle.setTextColor(TEXT);
+        circle.setTextSize(12);
+        circle.setAllCaps(false);
+        circle.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        circle.setBackground(circleBackground());
+        circle.setContentDescription("WLZ ClickGUI");
+
+        circle.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                clickGui.setVisibility(clickGui.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
+            }
+        });
+
+        FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(dp(62), dp(62), Gravity.RIGHT | Gravity.BOTTOM);
+        p.rightMargin = dp(18);
+        p.bottomMargin = dp(26);
+        root.addView(circle, p);
+    }
+
+    private void createClickGui() {
+        clickGui = buildClickGui();
+        clickGui.setVisibility(View.GONE);
+        FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(dp(320), dp(520), Gravity.RIGHT | Gravity.BOTTOM);
+        p.rightMargin = dp(10);
+        p.bottomMargin = dp(92);
+        root.addView(clickGui, p);
+    }
+
+    private View buildClickGui() {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(11), dp(11), dp(11), dp(11));
+        panel.setBackground(round(PANEL, ORANGE, 2, 18));
+
+        LinearLayout head = new LinearLayout(this);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        TextView brand = text("WLZ", 18, ORANGE, true);
+        head.addView(brand, new LinearLayout.LayoutParams(0, -2, 1));
+        Button keys = infoButton("MAP PHÍM");
+        keys.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                startActivity(new Intent(MainActivity.this, WlzControlEditorActivity.class));
+            }
+        });
+        head.addView(keys, lp(dp(105), dp(38)));
+        panel.addView(head);
+
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+
+        for (ModuleDef m : modules.values()) {
+            list.addView(moduleRow(m));
+        }
+        scroll.addView(list);
+        panel.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+
+        Button close = infoButton("ĐÓNG");
+        close.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                clickGui.setVisibility(View.GONE);
+            }
+        });
+        panel.addView(close, top(7));
+        return panel;
+    }
+
+    private View moduleRow(final ModuleDef module) {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(9), dp(3), dp(5), dp(3));
+        row.setBackground(round(PANEL_2, STROKE, 1, 11));
+
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.addView(text(module.name, 11, TEXT, true), lp(-1, -2));
+        copy.addView(text(module.desc, 8, MUTED, false), top(1));
+        row.addView(copy, new LinearLayout.LayoutParams(0, dp(48), 1));
+
+        Switch sw = new Switch(this);
+        sw.setChecked(WlzModuleManager.isModuleEnabled(this, module.index));
+        sw.setOnCheckedChangeListener((buttonView, isChecked) ->
+                WlzModuleManager.setModuleEnabled(MainActivity.this, module.index, isChecked));
+        row.addView(sw, lp(-2, dp(48)));
+
+        LinearLayout.LayoutParams rp = lp(-1, dp(52));
+        rp.bottomMargin = dp(5);
+        row.setLayoutParams(rp);
+        return row;
+    }
+
+    private void launchMinecraft() {
+        Intent intent = getPackageManager().getLaunchIntentForPackage(MC_PACKAGE);
+        if (intent == null) {
+            Toast.makeText(this, "Chưa có Minecraft Bedrock.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        try {
+            startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED));
+        } catch (Throwable e) {
+            Toast.makeText(this, "Không mở được Minecraft.", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private Button primaryButton(String title, int fill) {
+        Button b = new Button(this);
+        b.setText(title);
+        b.setTextColor(TEXT);
+        b.setTextSize(12);
+        b.setAllCaps(false);
+        b.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        b.setBackground(round(fill, ORANGE_LIGHT, 1, 14));
+        return b;
+    }
+
+    private Button infoButton(String title) {
+        Button b = new Button(this);
+        b.setText(title);
+        b.setTextColor(TEXT);
+        b.setTextSize(10);
+        b.setAllCaps(false);
+        b.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        b.setPadding(dp(6), 0, dp(6), 0);
+        b.setBackground(round(PANEL_2, STROKE, 1, 11));
+        return b;
+    }
+
+    private TextView footer() {
+        TextView t = text("WLZ Client 0.6.4 • ARM64 • no overlay permission", 8, MUTED, false);
+        t.setGravity(Gravity.CENTER);
+        return t;
     }
 
     private String profileName(int level) {
         if (level == 1) return "NHẸ";
         if (level == 2) return "MẠNH";
         return "SIÊU";
-    }
-
-    private void launchMinecraft() {
-        Intent intent = getPackageManager().getLaunchIntentForPackage(MC_PACKAGE);
-        if (intent == null) {
-            Toast.makeText(this, "Chưa cài Minecraft Bedrock.", Toast.LENGTH_LONG).show();
-            return;
-        }
-
-        try {
-            startClientService();
-        } catch (Throwable e) {
-            Toast.makeText(this, "Không thể khởi động WLZ runtime.", Toast.LENGTH_LONG).show();
-        }
-    }
-
-    private void activateClient() {
-        if (!Settings.canDrawOverlays(this)) {
-            try {
-                startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:" + getPackageName())));
-            } catch (Exception e) {
-                startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION));
-            }
-            return;
-        }
-
-        showOverlayService();
-        Toast.makeText(this, "WLZ floating shortcut đã khởi động.", Toast.LENGTH_SHORT).show();
-    }
-
-    private void startClientService() {
-        Intent intent = new Intent(this, WlzPreloadService.class)
-                .setAction(WlzPreloadService.ACTION_START_CLIENT);
-        try {
-            if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(intent);
-            else startService(intent);
-        } catch (Throwable e) {
-            Toast.makeText(this, "Không thể khởi động WLZ runtime.", Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    private void showOverlayService() {
-        Intent intent = new Intent(this, WlzPreloadService.class)
-                .setAction(WlzPreloadService.ACTION_SHOW_OVERLAY);
-        try {
-            if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(intent);
-            else startService(intent);
-        } catch (Throwable e) {
-            Toast.makeText(this, "Không thể khởi động WLZ overlay.", Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    private void refreshStatus() {
-        if (status == null) return;
-        boolean installed = getPackageManager().getLaunchIntentForPackage(MC_PACKAGE) != null;
-        status.setText(installed ? "● Minecraft đã sẵn sàng" : "● Chưa tìm thấy Minecraft trên máy");
-        status.setTextColor(installed ? GREEN : MUTED);
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        refreshStatus();
-    }
-
-    private Button actionButton(String title, int fill, int color) {
-        Button b = new Button(this);
-        b.setText(title);
-        b.setTextColor(color);
-        b.setTextSize(11);
-        b.setAllCaps(false);
-        b.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
-        b.setPadding(dp(8), 0, dp(8), 0);
-        b.setBackground(round(fill, fill == ORANGE ? ORANGE_LIGHT : STROKE, 1, 13));
-        return b;
     }
 
     private TextView text(String value, float size, int color, boolean bold) {
@@ -407,12 +422,26 @@ public final class MainActivity extends Activity {
         return t;
     }
 
-    private LinearLayout.LayoutParams lp(int width, int height) {
-        return new LinearLayout.LayoutParams(width, height);
+    private FrameLayout.LayoutParams centered(int w, int h) {
+        return centered(w, h, 0);
     }
 
-    private LinearLayout.LayoutParams top(int margin) {
-        LinearLayout.LayoutParams p = lp(-1, -2);
+    private FrameLayout.LayoutParams centered(int w, int h, int top) {
+        FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(w, h, Gravity.CENTER_HORIZONTAL);
+        p.topMargin = dp(top);
+        return p;
+    }
+
+    private FrameLayout.LayoutParams lp(int w, int h) {
+        return new FrameLayout.LayoutParams(w, h);
+    }
+
+    private FrameLayout.LayoutParams top(int margin) {
+        return top(margin, -2);
+    }
+
+    private FrameLayout.LayoutParams top(int margin, int height) {
+        FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(-1, height);
         p.topMargin = dp(margin);
         return p;
     }
@@ -422,6 +451,14 @@ public final class MainActivity extends Activity {
         d.setColor(fill);
         d.setCornerRadius(dp(radius));
         d.setStroke(dp(width), stroke);
+        return d;
+    }
+
+    private GradientDrawable circleBackground() {
+        GradientDrawable d = new GradientDrawable();
+        d.setShape(GradientDrawable.OVAL);
+        d.setColor(ORANGE);
+        d.setStroke(dp(2), TEXT);
         return d;
     }
 
