@@ -11,22 +11,73 @@ import android.os.IBinder;
 import android.provider.Settings;
 
 public final class WlzPreloadService extends Service {
+    public static final String ACTION_START_CLIENT = "com.wlz.client.action.START_CLIENT";
+    public static final String ACTION_SHOW_OVERLAY = "com.wlz.client.action.SHOW_OVERLAY";
+
     private static final String CHANNEL = "wlz_runtime";
+    private static final long OVERLAY_DELAY_MS = 1700L;
+
     private WlzOverlayController overlay;
+    private final android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
 
     @Override
     public void onCreate() {
         super.onCreate();
         startForegroundCompat();
         WlzModuleManager.initialize(this);
+    }
 
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        String action = intent == null ? ACTION_START_CLIENT : intent.getAction();
+
+        if (ACTION_SHOW_OVERLAY.equals(action)) {
+            showOverlay();
+            return START_STICKY;
+        }
+
+        if (ACTION_START_CLIENT.equals(action) || action == null) {
+            launchMinecraftThenOverlay();
+            return START_STICKY;
+        }
+
+        showOverlay();
+        return START_STICKY;
+    }
+
+    private void launchMinecraftThenOverlay() {
         if (!Settings.canDrawOverlays(this)) {
             stopSelf();
             return;
         }
 
-        overlay = new WlzOverlayController(this);
-        overlay.show();
+        Intent minecraft = getPackageManager().getLaunchIntentForPackage("com.mojang.minecraftpe");
+        if (minecraft == null) {
+            showOverlay();
+            return;
+        }
+
+        try {
+            minecraft.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+            startActivity(minecraft);
+        } catch (Throwable ignored) {
+            // Keep the runtime alive even when Minecraft cannot be launched.
+        }
+
+        handler.removeCallbacksAndMessages(null);
+        handler.postDelayed(this::showOverlay, OVERLAY_DELAY_MS);
+    }
+
+    private void showOverlay() {
+        if (!Settings.canDrawOverlays(this)) {
+            stopSelf();
+            return;
+        }
+
+        if (overlay == null) {
+            overlay = new WlzOverlayController(this);
+            overlay.show();
+        }
     }
 
     private void startForegroundCompat() {
@@ -47,7 +98,7 @@ public final class WlzPreloadService extends Service {
 
         builder.setSmallIcon(android.R.drawable.ic_menu_manage)
                 .setContentTitle("WLZ Client")
-                .setContentText("WLZ runtime + shortcut đang chạy")
+                .setContentText("WLZ preload runtime đang chạy")
                 .setContentIntent(pi)
                 .setOngoing(true);
 
@@ -61,16 +112,8 @@ public final class WlzPreloadService extends Service {
     }
 
     @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
-        if (overlay == null && Settings.canDrawOverlays(this)) {
-            overlay = new WlzOverlayController(this);
-            overlay.show();
-        }
-        return START_STICKY;
-    }
-
-    @Override
     public void onDestroy() {
+        handler.removeCallbacksAndMessages(null);
         if (overlay != null) overlay.close();
         overlay = null;
         super.onDestroy();
