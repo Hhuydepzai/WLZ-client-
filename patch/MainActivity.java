@@ -150,7 +150,7 @@ public final class MainActivity extends Activity {
         TextView title = text("  CLIENT", 15, TEXT, true);
         h.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
 
-        TextView badge = text("0.6.4", 10, ORANGE_LIGHT, true);
+        TextView badge = text("0.7.1", 10, ORANGE_LIGHT, true);
         badge.setGravity(Gravity.CENTER);
         badge.setPadding(dp(10), dp(5), dp(10), dp(5));
         badge.setBackground(round(ORANGE_DARK, ORANGE, 1, 16));
@@ -425,7 +425,7 @@ public final class MainActivity extends Activity {
     }
 
     private TextView footer() {
-        TextView t = text("WLZ Client 0.6.4 • ARM64 • no overlay permission", 8, MUTED, false);
+        TextView t = text("WLZ Client 0.7.1 • ARM64 • no overlay permission", 8, MUTED, false);
         t.setGravity(Gravity.CENTER);
         return t;
     }
