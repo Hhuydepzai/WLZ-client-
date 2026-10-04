@@ -439,7 +439,7 @@ public final class MainActivity extends Activity {
     }
 
     private LinearLayout.LayoutParams top(int margin) {
-        return new LinearLayout.LayoutParams(-1, dp(margin));
+        return top(margin, -1);
     }
 
     private LinearLayout.LayoutParams top(int margin, int height) {
