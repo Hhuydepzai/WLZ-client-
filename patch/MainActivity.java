@@ -330,7 +330,7 @@ public final class MainActivity extends Activity {
         }
 
         try {
-            startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED));
+            startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED));
 
             if (Settings.canDrawOverlays(this)) {
                 showOverlayService();
