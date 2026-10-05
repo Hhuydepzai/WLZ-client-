@@ -7,6 +7,7 @@ import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
@@ -72,7 +73,7 @@ public final class MainActivity extends Activity {
         splash.setBackgroundColor(BG);
 
         ImageView icon = new ImageView(this);
-        icon.setImageResource(R.drawable.wlz_icon);
+        icon.setImageDrawable(makeLogo());
         icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         splash.addView(icon, centered(dp(112), dp(112)));
 
