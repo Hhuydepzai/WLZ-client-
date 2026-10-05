@@ -114,10 +114,26 @@ def patch_manifest(manifest_path: Path):
     existing.set(name_attr, "com.wlz.client.MainActivity")
     existing.set(exported_attr, "true")
 
+    for filt in list(existing.findall("intent-filter")):
+        actions = [x.get(name_attr) for x in filt.findall("action")]
+        if "android.intent.action.MAIN" in actions:
+            existing.remove(filt)
+
     filt = ET.Element("intent-filter")
     ET.SubElement(filt, "action", {name_attr: "android.intent.action.MAIN"})
     ET.SubElement(filt, "category", {name_attr: "android.intent.category.LAUNCHER"})
     existing.append(filt)
+
+    def ensure_activity(name: str):
+        for activity in app.findall("activity"):
+            if activity.get(name_attr) == name:
+                return
+        node = ET.Element("activity")
+        node.set(name_attr, name)
+        node.set(exported_attr, "false")
+        app.append(node)
+
+    ensure_activity("com.wlz.client.WlzControlEditorActivity")
 
     tree.write(manifest_path, encoding="utf-8", xml_declaration=True)
 
