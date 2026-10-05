@@ -180,16 +180,18 @@ public final class WlzInGameHud {
         return null;
     }
 
-    private final Choreographer.FrameCallback frameCallback = frameTimeNanos -> {
-        frameCount++;
-        long now = System.nanoTime();
-        if (now - frameWindowStart >= 1_000_000_000L) {
-            final int fps = frameCount;
-            frameCount = 0;
-            frameWindowStart = now;
-            if (fpsText != null) activity.runOnUiThread(() -> fpsText.setText("FPS " + fps));
+    private final Choreographer.FrameCallback frameCallback = new Choreographer.FrameCallback() {
+        @Override public void doFrame(long frameTimeNanos) {
+            frameCount++;
+            long now = System.nanoTime();
+            if (now - frameWindowStart >= 1_000_000_000L) {
+                final int fps = frameCount;
+                frameCount = 0;
+                frameWindowStart = now;
+                if (fpsText != null) activity.runOnUiThread(() -> fpsText.setText("FPS " + fps));
+            }
+            Choreographer.getInstance().postFrameCallback(this);
         }
-        Choreographer.getInstance().postFrameCallback(frameCallback);
     };
 
     private void startFps() {
