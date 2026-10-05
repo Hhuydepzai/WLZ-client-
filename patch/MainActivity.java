@@ -511,7 +511,8 @@ public final class MainActivity extends Activity {
             this.index = index;
         }
     }
-}    private android.graphics.drawable.Drawable makeLogo() {
+
+    private android.graphics.drawable.Drawable makeLogo() {
         int size = dp(112);
         android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(
                 size, size, android.graphics.Bitmap.Config.ARGB_8888);
