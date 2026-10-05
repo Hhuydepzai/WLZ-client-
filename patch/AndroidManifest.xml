@@ -9,6 +9,12 @@
         android:theme="@style/AppTheme">
 
         <activity
+            android:name=".WlzHudActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <activity
             android:name=".WlzControlEditorActivity"
             android:exported="false"
             android:screenOrientation="portrait" />
