@@ -59,7 +59,7 @@ public final class MainActivity extends Activity {
         root.postDelayed(new Runnable() {
             @Override public void run() {
                 if (!isFinishing() && !isDestroyed()) {
-                    buildHome();
+                    launchMinecraft();
                 }
             }
         }, 520L);
