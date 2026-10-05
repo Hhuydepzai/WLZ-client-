@@ -24,7 +24,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 public final class MainActivity extends Activity {
-    private static final String MC_PACKAGE = "com.mojang.minecraftpe";
+    private static final String MC_ACTIVITY = "com.mojang.minecraftpe.MainActivity";
     private static final String PREFS = "wlz_settings";
     private static final int BG = Color.rgb(7, 9, 12);
     private static final int PANEL = Color.rgb(15, 18, 23);
@@ -171,7 +171,7 @@ public final class MainActivity extends Activity {
         title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         card.addView(title, top(5));
 
-        TextView sub = text("Minecraft Bedrock • ARM64 • Android 9+", 10, MUTED, false);
+        TextView sub = text("Minecraft Bedrock runtime tích hợp • ARM64 • Android 9+", 10, MUTED, false);
         card.addView(sub, top(4));
 
         TextView tiny = text("Launch → client runtime → in-game controls", 9, MUTED, false);
@@ -389,15 +389,25 @@ public final class MainActivity extends Activity {
     }
 
     private void launchMinecraft() {
-        Intent intent = getPackageManager().getLaunchIntentForPackage(MC_PACKAGE);
-        if (intent == null) {
-            Toast.makeText(this, "Chưa có Minecraft Bedrock.", Toast.LENGTH_LONG).show();
-            return;
-        }
         try {
-            startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED));
+            Intent intent = new Intent();
+            intent.setClassName(getPackageName(), MC_ACTIVITY);
+            intent.addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+            startActivity(intent);
+
+            root.postDelayed(new Runnable() {
+                @Override public void run() {
+                    try {
+                        Intent hud = new Intent(MainActivity.this, WlzHudActivity.class);
+                        hud.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION |
+                                Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
+                        startActivity(hud);
+                    } catch (Throwable ignored) {
+                    }
+                }
+            }, 900L);
         } catch (Throwable e) {
-            Toast.makeText(this, "Không mở được Minecraft.", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Không mở được Minecraft runtime.", Toast.LENGTH_LONG).show();
         }
     }
 
