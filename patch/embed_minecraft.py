@@ -141,7 +141,7 @@ def patch_manifest(manifest_path: Path):
 def next_dex_name(apk: zipfile.ZipFile) -> str:
     ids = []
     for n in apk.namelist():
-        m = re.fullmatch(r"classes(\\d*)\\.dex", Path(n).name)
+        m = re.fullmatch("classes([0-9]*)\\.dex", Path(n).name)
         if m:
             ids.append(1 if m.group(1) == "" else int(m.group(1)))
     n = max(ids or [1]) + 1
