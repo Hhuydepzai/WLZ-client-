@@ -3,6 +3,7 @@ package com.wlz.client;
 import android.app.Activity;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.view.Choreographer;
 import android.view.Gravity;
 import android.view.MotionEvent;
