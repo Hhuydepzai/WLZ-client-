@@ -1,4 +1,4 @@
-# WLZ Client v0.8.0
+# WLZ Client v0.8.1
 
 - Android 9+ (minSdk 28)
 - arm64-v8a first
