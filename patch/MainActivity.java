@@ -41,6 +41,20 @@ public final class MainActivity extends Activity {
     private SharedPreferences prefs;
     private FrameLayout root;
     private View clickGui;
+    private final android.app.Application.ActivityLifecycleCallbacks activityCallbacks =
+            new android.app.Application.ActivityLifecycleCallbacks() {
+                @Override public void onActivityCreated(Activity a, Bundle s) {}
+                @Override public void onActivityStarted(Activity a) {}
+                @Override public void onActivityResumed(Activity a) {
+                    WlzInGameHud.attach(a);
+                }
+                @Override public void onActivityPaused(Activity a) {}
+                @Override public void onActivityStopped(Activity a) {}
+                @Override public void onActivitySaveInstanceState(Activity a, Bundle s) {}
+                @Override public void onActivityDestroyed(Activity a) {
+                    WlzInGameHud.detach(a);
+                }
+            };
 
     @Override
     protected void onCreate(Bundle state) {
@@ -51,6 +65,7 @@ public final class MainActivity extends Activity {
 
         prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         defineModules();
+        getApplication().registerActivityLifecycleCallbacks(activityCallbacks);
 
         root = new FrameLayout(this);
         root.setBackgroundColor(BG);
@@ -64,6 +79,16 @@ public final class MainActivity extends Activity {
             }
         }, 520L);
     }
+
+    @Override
+    protected void onDestroy() {
+        try {
+            getApplication().unregisterActivityLifecycleCallbacks(activityCallbacks);
+        } catch (Throwable ignored) {
+        }
+        super.onDestroy();
+    }
+
 
     private View buildSplash() {
         LinearLayout splash = new LinearLayout(this);
@@ -396,17 +421,8 @@ public final class MainActivity extends Activity {
             intent.addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
             startActivity(intent);
 
-            root.postDelayed(new Runnable() {
-                @Override public void run() {
-                    try {
-                        Intent hud = new Intent(MainActivity.this, WlzHudActivity.class);
-                        hud.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION |
-                                Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
-                        startActivity(hud);
-                    } catch (Throwable ignored) {
-                    }
-                }
-            }, 900L);
+            // HUD attaches directly to MinecraftActivity through lifecycle callbacks.
+
         } catch (Throwable e) {
             Toast.makeText(this, "Không mở được Minecraft runtime.", Toast.LENGTH_LONG).show();
         }
