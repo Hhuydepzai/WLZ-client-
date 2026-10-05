@@ -1,4 +1,4 @@
-# WLZ Client v0.6.4
+# WLZ Client v0.8.0
 
 - Android 9+ (minSdk 28)
 - arm64-v8a first
@@ -39,4 +39,4 @@ The module manager and native runtime are therefore a clean integration layer fo
 Requires Android SDK 35, JDK 17 and Gradle 8.7. GitHub Actions is included.
 
 
-<!-- WLZ 0.7 controls: in-app ClickGUI + OTG key mapping; no overlay permission. -->
+<!-- WLZ 0.8: embedded-Minecraft launch path + in-app HUD activity; no overlay permission. -->
