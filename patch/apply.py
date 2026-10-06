@@ -1,5 +1,7 @@
 from pathlib import Path
+import os
 import shutil
+import subprocess
 
 APP = Path("app")
 JAVA = APP / "src/main/java/com/wlz/client"
@@ -12,7 +14,45 @@ def copy(name: str, dest: Path):
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(src, dest)
 
+def prepare_pairip_stub():
+    # WlzApplication keeps Minecraft's original PairIP Application as its
+    # superclass, preserving Minecraft's own application bootstrap.
+    # The stub is compile-only and is never packaged into the WLZ helper APK.
+    stub_root = APP / ".pairip_stub"
+    src_dir = stub_root / "com/pairip/application"
+    src_dir.mkdir(parents=True, exist_ok=True)
+    java = src_dir / "Application.java"
+    java.write_text(
+        "package com.pairip.application;\n"
+        "public class Application extends android.app.Application {}\n",
+        encoding="utf-8",
+    )
+
+    sdk_home = Path(os.environ.get("ANDROID_HOME", ""))
+    candidates = [sdk_home / "platforms" / "android-35" / "android.jar"]
+    platforms = sdk_home / "platforms"
+    if platforms.exists():
+        candidates.extend(sorted(platforms.glob("android-*/android.jar")))
+
+    sdk = next((p for p in reversed(candidates) if p.exists()), None)
+    if sdk is None:
+        raise SystemExit("Android SDK android.jar not found for PairIP compile stub")
+
+    classes = stub_root / "classes"
+    classes.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        ["javac", "-source", "8", "-target", "8", "-cp", str(sdk),
+         "-d", str(classes), str(java)],
+        check=True,
+    )
+    jar = APP / "pairip-stub.jar"
+    jar.unlink(missing_ok=True)
+    subprocess.run(["jar", "cf", str(jar), "-C", str(classes), "."], check=True)
+    shutil.rmtree(stub_root, ignore_errors=True)
+
 copy("build.gradle", APP / "build.gradle")
+prepare_pairip_stub()
+
 for name in [
     "MainActivity.java",
     "WlzApplication.java",
