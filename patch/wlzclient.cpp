@@ -1,77 +1,427 @@
 #include <jni.h>
 #include <android/log.h>
+#include <EGL/egl.h>
+#include <elf.h>
+#include <sys/mman.h>
+#include <unistd.h>
+
 #include <array>
 #include <atomic>
 #include <cstdarg>
+#include <chrono>
+#include <cmath>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
 #include <mutex>
+#include <thread>
+#include <vector>
 
 namespace {
-constexpr char TAG[] = "WLZRuntime";
+constexpr const char* TAG = "WLZRuntime";
+constexpr const char* MC_MODULE = "libminecraftpe.so";
 constexpr int MODULE_COUNT = 9;
 constexpr int PARAM_COUNT = 6;
+constexpr size_t INLINE_HEAD = 16;
+constexpr size_t FULLBRIGHT_HEAD = 12;
 
 std::atomic<bool> g_initialized{false};
+std::atomic<bool> g_mcReady{false};
+std::atomic<uint32_t> g_caps{0};
 std::array<std::atomic<bool>, MODULE_COUNT> g_modules{};
 std::array<std::atomic<int>, PARAM_COUNT> g_params{};
-std::once_flag g_init_once;
+std::once_flag g_initOnce;
+std::mutex g_patchMutex;
 
-void initialize_state() {
-    for (auto &m : g_modules) m.store(false);
-    for (auto &p : g_params) p.store(0);
-    g_params[0].store(150);  // Zoom percent
-    g_params[1].store(60);   // FPS target preference
-    g_params[2].store(100);  // Fullbright percent
-    g_params[3].store(1);    // Fix lag profile
-    g_params[4].store(0);    // Remove heavy effects
-    g_params[5].store(4);    // Texture colors
-}
+struct ModuleRange { uintptr_t base=0, start=0, end=0; };
+struct Patch { void* addr=nullptr; std::vector<uint8_t> original; bool active=false; };
+
+Patch g_fullbright;
+void* g_zoomTrampoline = nullptr;
+void* g_turnTrampoline = nullptr;
+void* g_lastPlayer = nullptr;
+
+using GetFovFn = float (*)(void*, float, int);
+using TurnDeltaFn = void (*)(void*, void*);
+using SwapFn = EGLBoolean (*)(EGLDisplay, EGLSurface);
+
+GetFovFn g_getFovOrig = nullptr;
+TurnDeltaFn g_turnOrig = nullptr;
+SwapFn g_swapOrig = nullptr;
+void** g_swapGot = nullptr;
+
+bool g_zoomHooked=false, g_turnHooked=false, g_swapHooked=false, g_fullbrightResolved=false;
+std::atomic<bool> g_snapPending{false};
+
+struct Vec2 { float x; float y; };
 
 void logi(const char* fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
-    __android_log_vprint(ANDROID_LOG_INFO, TAG, fmt, args);
-    va_end(args);
+    va_list ap;
+    va_start(ap, fmt);
+    __android_log_vprint(ANDROID_LOG_INFO, TAG, fmt, ap);
+    va_end(ap);
+}
+
+std::vector<int> parsePattern(const char* sig) {
+    std::vector<int> out;
+    const char* p=sig;
+    while (*p) {
+        while (*p==' ' || *p=='\t') ++p;
+        if (!*p) break;
+        if (*p=='?') { ++p; if (*p=='?') ++p; out.push_back(-1); continue; }
+        if (!p[1]) return {};
+        auto hex=[](char c)->int {
+            if (c>='0'&&c<='9') return c-'0';
+            if (c>='a'&&c<='f') return c-'a'+10;
+            if (c>='A'&&c<='F') return c-'A'+10;
+            return -1;
+        };
+        const int hi=hex(*p++), lo=hex(*p++);
+        if (hi<0 || lo<0) return {};
+        out.push_back((hi<<4)|lo);
+    }
+    return out;
+}
+
+std::vector<ModuleRange> moduleRanges() {
+    std::vector<ModuleRange> out;
+    FILE* f=std::fopen("/proc/self/maps","r");
+    if (!f) return out;
+
+    uintptr_t base=UINTPTR_MAX;
+    char line[1024];
+    while (std::fgets(line,sizeof(line),f)) {
+        unsigned long s=0,e=0,off=0;
+        char perm[8]={}, path[512]={};
+        int n=std::sscanf(line,"%lx-%lx %7s %lx %*s %*s %511[^\n]",&s,&e,perm,&off,path);
+        if (n<5 || !std::strstr(path,MC_MODULE)) continue;
+        if (off==0 && s<base) base=(uintptr_t)s;
+    }
+    std::rewind(f);
+    while (std::fgets(line,sizeof(line),f)) {
+        unsigned long s=0,e=0,off=0;
+        char perm[8]={}, path[512]={};
+        int n=std::sscanf(line,"%lx-%lx %7s %lx %*s %*s %511[^\n]",&s,&e,perm,&off,path);
+        if (n<5 || !std::strstr(path,MC_MODULE) || base==UINTPTR_MAX) continue;
+        if (perm[0]=='r' && perm[2]=='x')
+            out.push_back({base,(uintptr_t)s,(uintptr_t)e});
+    }
+    std::fclose(f);
+    return out;
+}
+
+uintptr_t resolveSignature(const char* sig) {
+    const auto p=parsePattern(sig);
+    if (p.empty()) return 0;
+    uintptr_t found=0;
+    int hits=0;
+    for (const auto& r: moduleRanges()) {
+        const size_t len=r.end-r.start;
+        if (len<p.size()) continue;
+        const uint8_t* b=reinterpret_cast<const uint8_t*>(r.start);
+        for (size_t i=0;i+p.size()<=len;++i) {
+            bool ok=true;
+            for (size_t j=0;j<p.size();++j) {
+                if (p[j]>=0 && b[i+j]!=static_cast<uint8_t>(p[j])) { ok=false; break; }
+            }
+            if (!ok) continue;
+            found=r.start+i;
+            if (++hits>1) return 0;
+        }
+    }
+    return hits==1 ? found : 0;
+}
+
+bool setExecWrite(void* addr,size_t len) {
+    const long ps=sysconf(_SC_PAGESIZE);
+    if (ps<=0 || !addr || !len) return false;
+    uintptr_t start=reinterpret_cast<uintptr_t>(addr)&~(static_cast<uintptr_t>(ps)-1);
+    uintptr_t end=(reinterpret_cast<uintptr_t>(addr)+len+ps-1)&~(static_cast<uintptr_t>(ps)-1);
+    return mprotect(reinterpret_cast<void*>(start),end-start,PROT_READ|PROT_WRITE|PROT_EXEC)==0;
+}
+
+bool writeCode(void* addr,const void* data,size_t len) {
+    if (!setExecWrite(addr,len)) return false;
+    std::memcpy(addr,data,len);
+    __builtin___clear_cache(reinterpret_cast<char*>(addr),reinterpret_cast<char*>(addr)+len);
+    const long ps=sysconf(_SC_PAGESIZE);
+    if (ps>0) {
+        uintptr_t start=reinterpret_cast<uintptr_t>(addr)&~(static_cast<uintptr_t>(ps)-1);
+        uintptr_t end=(reinterpret_cast<uintptr_t>(addr)+len+ps-1)&~(static_cast<uintptr_t>(ps)-1);
+        mprotect(reinterpret_cast<void*>(start),end-start,PROT_READ|PROT_EXEC);
+    }
+    return true;
+}
+
+void absJump16(uint8_t out[16],uintptr_t target) {
+    const uint32_t ldrX17=0x58000051U; // ldr x17, #8
+    const uint32_t brX17 =0xD61F0220U; // br x17
+    std::memcpy(out+0,&ldrX17,4);
+    std::memcpy(out+4,&brX17,4);
+    std::memcpy(out+8,&target,8);
+}
+
+void* installInlineHook(void* target,void* detour,void** originalOut) {
+    if (!target || !detour || !originalOut) return nullptr;
+    constexpr size_t trampSize=64;
+    void* tramp=mmap(nullptr,trampSize,PROT_READ|PROT_WRITE|PROT_EXEC,MAP_PRIVATE|MAP_ANONYMOUS,-1,0);
+    if (tramp==MAP_FAILED) return nullptr;
+
+    std::memcpy(tramp,target,INLINE_HEAD);
+    uint8_t back[16]{};
+    absJump16(back,reinterpret_cast<uintptr_t>(target)+INLINE_HEAD);
+    std::memcpy(reinterpret_cast<uint8_t*>(tramp)+INLINE_HEAD,back,16);
+    __builtin___clear_cache(reinterpret_cast<char*>(tramp),reinterpret_cast<char*>(tramp)+32);
+
+    uint8_t jump[16]{};
+    absJump16(jump,reinterpret_cast<uintptr_t>(detour));
+    if (!writeCode(target,jump,sizeof(jump))) {
+        munmap(tramp,trampSize);
+        return nullptr;
+    }
+    *originalOut=tramp;
+    return tramp;
+}
+
+float getFovHook(void* self,float base,int variableFov) {
+    float out=g_getFovOrig ? g_getFovOrig(self,base,variableFov) : base;
+    if (!g_modules[0].load()) return out;
+    if (!std::isfinite(out) || out<1.0f || out>180.0f) out=base;
+    return std::clamp(out*0.50f,20.0f,70.0f);
+}
+
+void snapPlayer(void* player) {
+    if (!player) return;
+    uintptr_t actor=reinterpret_cast<uintptr_t>(player);
+    uintptr_t rotComp=0;
+    std::memcpy(&rotComp,reinterpret_cast<void*>(actor+0x218),sizeof(rotComp));
+    if (rotComp<0x1000) return;
+    auto* rot=reinterpret_cast<Vec2*>(rotComp);
+    rot->y += 180.0f;
+    while (rot->y>180.0f) rot->y-=360.0f;
+    while (rot->y<-180.0f) rot->y+=360.0f;
+}
+
+void turnDeltaHook(void* self,void* deltaPtr) {
+    if (!self || !deltaPtr) {
+        if (g_turnOrig) g_turnOrig(self,deltaPtr);
+        return;
+    }
+    g_lastPlayer=self;
+    if (g_modules[7].load() && g_snapPending.exchange(false))
+        snapPlayer(self);
+
+    Vec2 d{};
+    std::memcpy(&d,deltaPtr,sizeof(d));
+    if (g_modules[0].load()) { d.x*=0.38f; d.y*=0.38f; }
+    if (g_turnOrig) g_turnOrig(self,&d);
+}
+
+EGLBoolean swapHook(EGLDisplay display,EGLSurface surface) {
+    if (!g_swapOrig) return EGL_FALSE;
+    if (display!=EGL_NO_DISPLAY) eglSwapInterval(display,g_modules[3].load()?0:1);
+    return g_swapOrig(display,surface);
+}
+
+bool installZoomAndTurn() {
+    bool ok=true;
+    if (!g_zoomHooked) {
+        uintptr_t a=resolveSignature("? ? ? FC ? ? ? 6D ? ? ? A9 ? ? ? F9 ? ? ? A9 ? ? ? 91 08 40 20 1E");
+        if (!a || !installInlineHook(reinterpret_cast<void*>(a),reinterpret_cast<void*>(&getFovHook),reinterpret_cast<void**>(&g_getFovOrig))) ok=false;
+        else g_zoomHooked=true;
+    }
+    if (!g_turnHooked) {
+        uintptr_t a=resolveSignature("? ? ? D1 ? ? ? FD ? ? ? A9 ? ? ? A9 ? ? ? A9 ? ? ? A9 ? ? ? 91 56 D0 3B D5 F3 03 00 AA F4 03 01 AA ? ? ? F9 ? ? ? F8 ? ? ? F9 ? ? ? F9");
+        if (!a || !installInlineHook(reinterpret_cast<void*>(a),reinterpret_cast<void*>(&turnDeltaHook),reinterpret_cast<void**>(&g_turnOrig))) ok=false;
+        else g_turnHooked=true;
+    }
+    return ok && g_zoomHooked;
+}
+
+bool resolveFullbright() {
+    if (g_fullbrightResolved) return true;
+    uintptr_t a=resolveSignature("? ? ? A9 FD 03 00 91 ? ? ? F9 ? ? ? 52 ? ? ? F9 00 01 3F D6 ? ? ? A8 ? ? ? 14 ? ? ? A9 ? ? ? F9 FD 03 00 91 ? ? ? F9 F3 03 01 2A ? ? ? 52 ? ? ? F9 00 01 3F D6 E1 03 13 2A ? ? ? F9 ? ? ? A8 ? ? ? 14 ? ? ? A9 ? ? ? A9");
+    if (!a) return false;
+    g_fullbright.addr=reinterpret_cast<void*>(a);
+    g_fullbrightResolved=true;
+    return true;
+}
+
+bool resolveSwapImport() {
+    if (g_swapHooked) return true;
+    const auto ranges=moduleRanges();
+    for (const auto& r:ranges) {
+        const auto* eh=reinterpret_cast<const Elf64_Ehdr*>(r.base);
+        if (eh->e_ident[EI_MAG0]!=ELFMAG0 || eh->e_ident[EI_MAG1]!=ELFMAG1 ||
+            eh->e_ident[EI_MAG2]!=ELFMAG2 || eh->e_ident[EI_MAG3]!=ELFMAG3 ||
+            eh->e_ident[EI_CLASS]!=ELFCLASS64) continue;
+
+        const auto* ph=reinterpret_cast<const Elf64_Phdr*>(r.base+eh->e_phoff);
+        const Elf64_Phdr* dynPh=nullptr;
+        for (int i=0;i<eh->e_phnum;++i) if (ph[i].p_type==PT_DYNAMIC) { dynPh=&ph[i]; break; }
+        if (!dynPh) continue;
+
+        const auto* dyn=reinterpret_cast<const Elf64_Dyn*>(r.base+dynPh->p_vaddr);
+        const char* strtab=nullptr;
+        const Elf64_Sym* symtab=nullptr;
+        const Elf64_Rela* rela=nullptr;
+        size_t relaCount=0;
+        for (;dyn->d_tag!=DT_NULL;++dyn) {
+            if (dyn->d_tag==DT_STRTAB) strtab=reinterpret_cast<const char*>(r.base+dyn->d_un.d_ptr);
+            else if (dyn->d_tag==DT_SYMTAB) symtab=reinterpret_cast<const Elf64_Sym*>(r.base+dyn->d_un.d_ptr);
+            else if (dyn->d_tag==DT_JMPREL) rela=reinterpret_cast<const Elf64_Rela*>(r.base+dyn->d_un.d_ptr);
+            else if (dyn->d_tag==DT_PLTRELSZ) relaCount=dyn->d_un.d_val/sizeof(Elf64_Rela);
+        }
+        if (!strtab || !symtab || !rela || !relaCount) continue;
+
+        for (size_t i=0;i<relaCount;++i) {
+            const auto& rr=rela[i];
+            if (ELF64_R_TYPE(rr.r_info)!=R_AARCH64_JUMP_SLOT) continue;
+            const auto idx=ELF64_R_SYM(rr.r_info);
+            const char* name=strtab+symtab[idx].st_name;
+            if (std::strcmp(name,"eglSwapBuffers")!=0) continue;
+            auto* got=reinterpret_cast<void**>(r.base+rr.r_offset);
+            if (!got || !*got) continue;
+            g_swapGot=got;
+            g_swapOrig=reinterpret_cast<SwapFn>(*got);
+            void* repl=reinterpret_cast<void*>(&swapHook);
+            if (writeCode(got,&repl,sizeof(repl))) {
+                g_swapHooked=true;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void applyFullbright() {
+    static const uint8_t patch[FULLBRIGHT_HEAD]={
+        0x40,0x8F,0xA8,0x52, 0x00,0x00,0x27,0x1E, 0xC0,0x03,0x5F,0xD6
+    };
+    if (g_fullbrightResolved && g_modules[4].load()) {
+        std::lock_guard<std::mutex> lock(g_patchMutex);
+        if (!g_fullbright.active) {
+            g_fullbright.original.resize(sizeof(patch));
+            std::memcpy(g_fullbright.original.data(),g_fullbright.addr,sizeof(patch));
+            if (writeCode(g_fullbright.addr,patch,sizeof(patch))) g_fullbright.active=true;
+        }
+    } else {
+        std::lock_guard<std::mutex> lock(g_patchMutex);
+        if (g_fullbright.active) {
+            writeCode(g_fullbright.addr,g_fullbright.original.data(),g_fullbright.original.size());
+            g_fullbright.active=false;
+        }
+    }
+}
+
+void doSnapNow() {
+    if (g_modules[7].load() && g_lastPlayer) {
+        snapPlayer(g_lastPlayer);
+        g_snapPending.store(false);
+    }
+}
+
+void refreshCapabilities() {
+    uint32_t caps=0;
+    if (installZoomAndTurn()) {
+        caps|=(1u<<0);
+        caps|=(1u<<7); // Snaplook uses actor rotation component through TurnDelta.
+    }
+    if (resolveFullbright()) caps|=(1u<<4);
+    if (resolveSwapImport()) caps|=(1u<<3);
+    g_caps.store(caps);
+    logi("MC ready. WLZ capabilities=0x%X",caps);
+}
+
+void runtimeThread() {
+    for (int i=0;i<500 && !g_mcReady.load();++i) {
+        if (!moduleRanges().empty()) { g_mcReady.store(true); break; }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    if (!g_mcReady.load()) return;
+    refreshCapabilities();
+    applyFullbright();
+    doSnapNow();
+}
+
+void initializeState() {
+    for (auto& m:g_modules) m.store(false);
+    for (auto& p:g_params) p.store(0);
+    g_params[0].store(150);
+    g_params[1].store(60);
+    g_params[2].store(100);
+    g_params[3].store(1);
+    g_params[4].store(0);
+    g_params[5].store(4);
+}
+
+bool supported(int index) {
+    if (index==8) return true;
+    if (index<0 || index>=MODULE_COUNT) return false;
+    return (g_caps.load()&(1u<<index))!=0;
 }
 }
 
-extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM*, void*) {
-    std::call_once(g_init_once, initialize_state);
+extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM*,void*) {
+    std::call_once(g_initOnce,initializeState);
+    if (!g_initialized.exchange(true)) std::thread(runtimeThread).detach();
     logi("WLZ native runtime loaded");
     return JNI_VERSION_1_6;
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
-Java_com_wlz_client_WlzRuntimeBridge_nativeInitialize(JNIEnv*, jclass) {
-    std::call_once(g_init_once, initialize_state);
-    g_initialized.store(true);
+Java_com_wlz_client_WlzRuntimeBridge_nativeInitialize(JNIEnv*,jclass) {
+    std::call_once(g_initOnce,initializeState);
+    if (!g_initialized.exchange(true)) std::thread(runtimeThread).detach();
     return JNI_TRUE;
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
-Java_com_wlz_client_WlzRuntimeBridge_nativeIsLoaded(JNIEnv*, jclass) {
-    return g_initialized.load() ? JNI_TRUE : JNI_FALSE;
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_com_wlz_client_WlzRuntimeBridge_nativeSetModule(JNIEnv*, jclass, jint index, jboolean enabled) {
-    if (index < 0 || index >= MODULE_COUNT) return;
-    g_modules[static_cast<size_t>(index)].store(enabled == JNI_TRUE);
+Java_com_wlz_client_WlzRuntimeBridge_nativeIsLoaded(JNIEnv*,jclass) {
+    return g_initialized.load()?JNI_TRUE:JNI_FALSE;
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
-Java_com_wlz_client_WlzRuntimeBridge_nativeGetModule(JNIEnv*, jclass, jint index) {
-    if (index < 0 || index >= MODULE_COUNT) return JNI_FALSE;
-    return g_modules[static_cast<size_t>(index)].load() ? JNI_TRUE : JNI_FALSE;
+Java_com_wlz_client_WlzRuntimeBridge_nativeIsMinecraftReady(JNIEnv*,jclass) {
+    return g_mcReady.load()?JNI_TRUE:JNI_FALSE;
 }
 
-extern "C" JNIEXPORT void JNICALL
-Java_com_wlz_client_WlzRuntimeBridge_nativeSetParam(JNIEnv*, jclass, jint key, jint value) {
-    if (key < 0 || key >= PARAM_COUNT) return;
-    g_params[static_cast<size_t>(key)].store(value);
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_wlz_client_WlzRuntimeBridge_nativeIsModuleSupported(JNIEnv*,jclass,jint index) {
+    return supported(index)?JNI_TRUE:JNI_FALSE;
 }
 
 extern "C" JNIEXPORT jint JNICALL
-Java_com_wlz_client_WlzRuntimeBridge_nativeGetParam(JNIEnv*, jclass, jint key) {
-    if (key < 0 || key >= PARAM_COUNT) return 0;
-    return g_params[static_cast<size_t>(key)].load();
+Java_com_wlz_client_WlzRuntimeBridge_nativeGetCapabilities(JNIEnv*,jclass) {
+    return static_cast<jint>(g_caps.load());
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_wlz_client_WlzRuntimeBridge_nativeSetModule(JNIEnv*,jclass,jint index,jboolean enabled) {
+    if (index<0 || index>=MODULE_COUNT) return;
+    const bool on=enabled==JNI_TRUE;
+    g_modules[index].store(on);
+    if (index==7 && on) {
+        g_snapPending.store(true);
+        doSnapNow();
+    }
+    if (index==4) applyFullbright();
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_wlz_client_WlzRuntimeBridge_nativeGetModule(JNIEnv*,jclass,jint index) {
+    if (index<0 || index>=MODULE_COUNT) return JNI_FALSE;
+    return g_modules[index].load()?JNI_TRUE:JNI_FALSE;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_wlz_client_WlzRuntimeBridge_nativeSetParam(JNIEnv*,jclass,jint key,jint value) {
+    if (key<0 || key>=PARAM_COUNT) return;
+    g_params[key].store(value);
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_com_wlz_client_WlzRuntimeBridge_nativeGetParam(JNIEnv*,jclass,jint key) {
+    if (key<0 || key>=PARAM_COUNT) return 0;
+    return g_params[key].load();
 }
