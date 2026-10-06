@@ -11,7 +11,7 @@ on:
     inputs:
       minecraft_url:
         description: "Direct URL to the user-supplied Minecraft runtime ZIP/APK"
-        required: false
+        required: true
         type: string
       minecraft_sha256:
         description: "Optional SHA-256 of the runtime download"
@@ -38,21 +38,39 @@ jobs:
           unzip -q app.zip
           unzip -q tools.zip
 
-      - name: Download external Minecraft runtime
-        if: ${{ inputs.minecraft_url != '' }}
+      - name: Download and validate Minecraft runtime
         shell: bash
         run: |
           set -euo pipefail
+          URL="${{ inputs.minecraft_url }}"
+          case "$URL" in
+            https://*|http://*) ;;
+            *) echo "minecraft_url must be a direct http(s) URL to the runtime ZIP/APK"; exit 1 ;;
+          esac
+
           mkdir -p minecraft_input
-          curl -fL --retry 3 --retry-delay 2 "${{ inputs.minecraft_url }}" -o minecraft_input/runtime.bin
+          curl -fL --retry 3 --retry-delay 2 "$URL" -o minecraft_input/runtime.bin
+
           if [ -n "${{ inputs.minecraft_sha256 }}" ]; then
             echo "${{ inputs.minecraft_sha256 }}  minecraft_input/runtime.bin" | sha256sum -c -
           fi
+
+          test -s minecraft_input/runtime.bin
+          SIZE="$(stat -c '%s' minecraft_input/runtime.bin)"
+          echo "Runtime download: $SIZE bytes"
+          if [ "$SIZE" -lt 20000000 ]; then
+            echo "Downloaded file is far too small to be a Minecraft Bedrock runtime."
+            exit 1
+          fi
+
           case "$(file -b --mime-type minecraft_input/runtime.bin)" in
             application/zip|application/vnd.android.package-archive|application/octet-stream) ;;
             *) echo "Runtime download does not look like ZIP/APK"; exit 1 ;;
           esac
+
           mv minecraft_input/runtime.bin minecraft_input/runtime.zip
+          unzip -tq minecraft_input/runtime.zip
+          echo "Runtime archive is a valid ZIP/APK."
 
       - name: Apply WLZ patch
         run: |
@@ -73,42 +91,24 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          found=0
-          if [ -d minecraft_input ] && find minecraft_input -type f \( -name '*.apk' -o -name '*.zip' \) -print -quit | grep -q .; then
-            found=1
-          fi
+          APKTOOL_URL="$(curl -fsSL https://api.github.com/repos/iBotPeaches/Apktool/releases/latest | jq -r '.assets[] | select(.name | endswith(".jar")) | .browser_download_url' | head -n 1)"
+          test -n "$APKTOOL_URL"
+          curl -fL "$APKTOOL_URL" -o apktool.jar
 
-          if [ "$found" -eq 1 ]; then
-            APKTOOL_URL="$(curl -fsSL https://api.github.com/repos/iBotPeaches/Apktool/releases/latest | jq -r '.assets[] | select(.name | endswith(".jar")) | .browser_download_url' | head -n 1)"
-            test -n "$APKTOOL_URL"
-            curl -fL "$APKTOOL_URL" -o apktool.jar
-            python3 patch/embed_minecraft.py \
-              --input minecraft_input \
-              --wlz-apk app/build/outputs/apk/debug/app-debug.apk \
-              --apktool apktool.jar \
-              --out dist/WLZ-Minecraft-unsigned.apk
+          python3 patch/embed_minecraft.py             --input minecraft_input             --wlz-apk app/build/outputs/apk/debug/app-debug.apk             --apktool apktool.jar             --out dist/WLZ-Minecraft-unsigned.apk
 
-            BT="$(ls -1 "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
-            ZIPALIGN="$ANDROID_HOME/build-tools/$BT/zipalign"
-            APKSIGNER="$ANDROID_HOME/build-tools/$BT/apksigner"
-            "$ZIPALIGN" -f -p 4 dist/WLZ-Minecraft-unsigned.apk dist/WLZ-Minecraft-aligned.apk
-            keytool -genkeypair -v \
-              -keystore dist/wlz-ci.jks \
-              -storepass wlzclient \
-              -keypass wlzclient \
-              -alias wlz \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -dname "CN=WLZ Client,O=WLZ"
-            "$APKSIGNER" sign \
-              --ks dist/wlz-ci.jks \
-              --ks-pass pass:wlzclient \
-              --key-pass pass:wlzclient \
-              --out dist/WLZ-Minecraft.apk \
-              dist/WLZ-Minecraft-aligned.apk
-            "$APKSIGNER" verify --verbose dist/WLZ-Minecraft.apk
-          else
-            cp app/build/outputs/apk/debug/app-debug.apk dist/WLZ-Client-helper.apk
-          fi
+          BT="$(ls -1 "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
+          ZIPALIGN="$ANDROID_HOME/build-tools/$BT/zipalign"
+          APKSIGNER="$ANDROID_HOME/build-tools/$BT/apksigner"
+
+          "$ZIPALIGN" -f -p 4             dist/WLZ-Minecraft-unsigned.apk             dist/WLZ-Minecraft-aligned.apk
+
+          keytool -genkeypair -v             -keystore dist/wlz-ci.jks             -storepass wlzclient             -keypass wlzclient             -alias wlz             -keyalg RSA -keysize 2048 -validity 10000             -dname "CN=WLZ Client,O=WLZ"
+
+          "$APKSIGNER" sign             --ks dist/wlz-ci.jks             --ks-pass pass:wlzclient             --key-pass pass:wlzclient             --out dist/WLZ-Minecraft.apk             dist/WLZ-Minecraft-aligned.apk
+
+          "$APKSIGNER" verify --verbose dist/WLZ-Minecraft.apk
+          test -s dist/WLZ-Minecraft.apk
 
       - name: Show artifacts
         run: find dist -maxdepth 1 -type f -printf '%f %s bytes\n' | sort
@@ -116,6 +116,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: WLZ-Client-APK
-          path: dist/*.apk
+          name: WLZ-Minecraft-APK
+          path: dist/WLZ-Minecraft.apk
           if-no-files-found: error
