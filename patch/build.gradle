@@ -8,8 +8,8 @@ android {
         applicationId 'com.wlz.client'
         minSdk 28
         targetSdk 35
-        versionCode 14
-        versionName '0.9.0'
+        versionCode 15
+        versionName '0.9.1'
 
         ndk { abiFilters 'arm64-v8a' }
 
@@ -38,5 +38,11 @@ android {
     packaging {
         jniLibs { useLegacyPackaging true }
         resources { excludes += ['/META-INF/{AL2.0,LGPL2.1}'] }
+    }
+
+    dependencies {
+        // Compile-only stub for Minecraft's existing PairIP Application superclass.
+        // The real class comes from the embedded Minecraft dex files.
+        compileOnly files('pairip-stub.jar')
     }
 }
