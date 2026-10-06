@@ -332,15 +332,23 @@ void doSnapNow() {
 }
 
 void refreshCapabilities() {
+    // Startup must be non-invasive. Only probe signatures here; do not patch
+    // executable code or the EGL GOT table while Minecraft is still settling.
     uint32_t caps=0;
-    installZoomHook();
-    installTurnHook();
-    if (g_zoomHooked) caps|=(1u<<0);
-    if (g_turnHooked) caps|=(1u<<7); // Snaplook uses actor rotation through TurnDelta.
+
+    static const char* ZOOM_SIG =
+        "? ? ? FC ? ? ? 6D ? ? ? A9 ? ? ? F9 ? ? ? A9 ? ? ? 91 08 40 20 1E";
+    static const char* TURN_SIG =
+        "? ? ? D1 ? ? ? FD ? ? ? A9 ? ? ? A9 ? ? ? A9 ? ? ? A9 ? ? ? 91 56 D0 3B D5 F3 03 00 AA F4 03 01 AA ? ? ? F9 ? ? ? F8 ? ? ? F9 ? ? ? F9";
+
+    if (resolveSignature(ZOOM_SIG)) caps|=(1u<<0);
+    if (resolveSignature(TURN_SIG)) caps|=(1u<<7); // Snaplook.
     if (resolveFullbright()) caps|=(1u<<4);
-    if (resolveSwapImport()) caps|=(1u<<3);
+
+    // Unlock FPS uses an EGL GOT patch and is intentionally not probed/applied
+    // during automatic startup. It remains disabled until explicitly enabled.
     g_caps.store(caps);
-    logi("MC ready. WLZ capabilities=0x%X",caps);
+    logi("MC ready. WLZ safe capabilities=0x%X",caps);
 }
 
 void runtimeThread() {
@@ -410,7 +418,32 @@ extern "C" JNIEXPORT void JNICALL
 Java_com_wlz_client_WlzRuntimeBridge_nativeSetModule(JNIEnv*,jclass,jint index,jboolean enabled) {
     if (index<0 || index>=MODULE_COUNT) return;
     const bool on=enabled==JNI_TRUE;
+
+    // Invasive native patches are installed only on explicit user action,
+    // never during application startup.
+    if (on && index==0 && !g_zoomHooked) {
+        installZoomHook();
+        if (!g_zoomHooked) {
+            g_modules[index].store(false);
+            return;
+        }
+    }
+    if (on && index==7 && !g_turnHooked) {
+        installTurnHook();
+        if (!g_turnHooked) {
+            g_modules[index].store(false);
+            return;
+        }
+    }
+    if (on && index==3 && !g_swapHooked) {
+        if (!resolveSwapImport()) {
+            g_modules[index].store(false);
+            return;
+        }
+    }
+
     g_modules[index].store(on);
+
     if (index==7 && on) {
         g_snapPending.store(true);
         doSnapNow();
