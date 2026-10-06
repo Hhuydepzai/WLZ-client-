@@ -54,6 +54,7 @@ public final class WlzInGameHud {
     private TextView fpsText;
     private LinearLayout panel;
     private boolean panelVisible;
+    private final View[] quickButtons = new View[5];
 
     private Window.Callback originalCallback;
     private Window.Callback callbackProxy;
@@ -75,6 +76,7 @@ public final class WlzInGameHud {
         cp.topMargin = prefs().getInt("hud_y", dp(120));
         layer.addView(circle, cp);
         makeDraggable(circle, cp, "hud_x", "hud_y", true);
+        addQuickButtons();
 
         installKeyHook();
         applyVisuals();
@@ -94,6 +96,80 @@ public final class WlzInGameHud {
     public static void detach(Activity activity) {
         WlzInGameHud hud = ACTIVE.remove(activity);
         if (hud != null) hud.close();
+    }
+
+    private void addQuickButtons() {
+        final String[] labels = {"ZOOM", "FPS", "BRIGHT", "SNAP", "MENU"};
+        final int[] actions = {0, 3, 4, 7, -1};
+
+        int visible = 0;
+        for (int i = 0; i < labels.length; i++) {
+            if (actions[i] >= 0 && !WlzModuleManager.isModuleSupported(activity, actions[i])) {
+                continue;
+            }
+
+            final int slot = i;
+            final int action = actions[i];
+            Button b = button(labels[i]);
+            b.setTextSize(9);
+            b.setBackground(round(ORANGE, ORANGE, 1, 11));
+            b.setAlpha(0.94f);
+            b.setOnClickListener(v -> {
+                if (action < 0) {
+                    togglePanel();
+                    return;
+                }
+                boolean enabled = WlzModuleManager.isModuleEnabled(activity, action);
+                WlzModuleManager.setModuleEnabled(activity, action, !enabled);
+                applyVisuals();
+            });
+
+            FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(dp(74), dp(40));
+            p.leftMargin = controlPrefs().getInt("quick_x_" + slot,
+                    dp(14 + (visible % 2) * 82));
+            p.topMargin = controlPrefs().getInt("quick_y_" + slot,
+                    dp(196 + (visible / 2) * 48));
+            layer.addView(b, p);
+            quickButtons[slot] = b;
+            makeQuickDraggable(b, p, slot);
+            visible++;
+        }
+    }
+
+    private void makeQuickDraggable(View v, final FrameLayout.LayoutParams p, final int slot) {
+        v.setOnTouchListener(new View.OnTouchListener() {
+            float downX, downY;
+            int startX, startY;
+            boolean moved;
+            @Override public boolean onTouch(View view, MotionEvent e) {
+                if (e.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                    downX = e.getRawX();
+                    downY = e.getRawY();
+                    startX = p.leftMargin;
+                    startY = p.topMargin;
+                    moved = false;
+                    return true;
+                }
+                if (e.getActionMasked() == MotionEvent.ACTION_MOVE) {
+                    int nx = startX + (int) (e.getRawX() - downX);
+                    int ny = startY + (int) (e.getRawY() - downY);
+                    p.leftMargin = Math.max(0, Math.min(nx, decor.getWidth() - view.getWidth()));
+                    p.topMargin = Math.max(0, Math.min(ny, decor.getHeight() - view.getHeight()));
+                    view.setLayoutParams(p);
+                    controlPrefs().edit()
+                            .putInt("quick_x_" + slot, p.leftMargin)
+                            .putInt("quick_y_" + slot, p.topMargin)
+                            .apply();
+                    moved = true;
+                    return true;
+                }
+                if (e.getActionMasked() == MotionEvent.ACTION_UP) {
+                    if (!moved) view.performClick();
+                    return true;
+                }
+                return true;
+            }
+        });
     }
 
     private void installKeyHook() {
