@@ -78,14 +78,9 @@ public final class WlzModuleManager {
             WlzRuntimeBridge.nativeInitialize();
             nativeStarted = true;
 
-            // Apply the saved Java-side state only after the native runtime is
-            // attached to the running Minecraft process.
-            for (int i = 0; i < MODULE_COUNT; i++) {
-                boolean enabled = isModuleEnabled(context, i);
-                if (enabled && isModuleSupported(context, i)) {
-                    WlzRuntimeBridge.nativeSetModule(i, true);
-                }
-            }
+            // Do not re-apply persisted native toggles automatically. Native
+            // hooks are only installed after an explicit user action, which keeps
+            // the Minecraft startup path free of invasive patches.
             Log.i(TAG, "WLZ native runtime attached after Minecraft resume");
         } catch (Throwable e) {
             nativeStarted = false;
