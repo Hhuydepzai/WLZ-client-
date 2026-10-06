@@ -126,7 +126,10 @@ def patch_manifest(path):
     app.set(label, "WLZ Client")
     app.set(icon, "@drawable/wlz_icon")
     app.set(round_icon, "@drawable/wlz_icon")
-    app.set(name, "com.wlz.client.WlzApplication")
+
+    # IMPORTANT: keep Minecraft's original Application class intact.
+    # Its startup/bootstrap and integrity/licensing initialization must not be
+    # replaced by WLZ. We attach WLZ through a lightweight ContentProvider.
     for a in list(app.findall("activity")):
         for f in list(a.findall("intent-filter")):
             acts = [x.get(name) for x in f.findall("action")]
@@ -144,6 +147,17 @@ def patch_manifest(path):
     ET.SubElement(f, "action", {name: "android.intent.action.MAIN"})
     ET.SubElement(f, "category", {name: "android.intent.category.LAUNCHER"})
     ensure("com.wlz.client.WlzControlEditorActivity")
+
+    provider_name = f"{{{ANDROID_NS}}}name"
+    providers = app.findall("provider")
+    if not any(p.get(provider_name) == "com.wlz.client.WlzBootstrapProvider" for p in providers):
+        ET.SubElement(app, "provider", {
+            provider_name: "com.wlz.client.WlzBootstrapProvider",
+            "{" + ANDROID_NS + "}authorities": f"{root.get('package', 'com.mojang.minecraftpe')}.wlzbootstrap",
+            "{" + ANDROID_NS + "}exported": "false",
+            "{" + ANDROID_NS + "}initOrder": "100"
+        })
+
     tree.write(path, encoding="utf-8", xml_declaration=True)
 
 def next_dex(existing):
