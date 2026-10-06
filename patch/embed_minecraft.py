@@ -1,33 +1,41 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import argparse
-import re
-import shutil
-import subprocess
-import tempfile
-import zipfile
+import argparse, hashlib, re, shutil, subprocess, tempfile, zipfile
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
 ANDROID_NS = "http://schemas.android.com/apk/res/android"
 ET.register_namespace("android", ANDROID_NS)
 MC_SO = "lib/arm64-v8a/libminecraftpe.so"
+STORED = {".so", ".dex", ".arsc", ".apk"}
 
 def run(cmd):
-    print("+", " ".join(map(str, cmd)))
+    print("+", " ".join(map(str, cmd)), flush=True)
     subprocess.run(cmd, check=True)
 
-def extract_all_zips(input_dir: Path, out_dir: Path):
-    out_dir.mkdir(parents=True, exist_ok=True)
-    pending = list(input_dir.rglob("*.zip"))
+def sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for b in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(b)
+    return h.hexdigest()
+
+def copy_unique(src, dst):
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if not dst.exists():
+        shutil.copy2(src, dst)
+        return
+    if src.stat().st_size == dst.stat().st_size and sha256(src) == sha256(dst):
+        return
+    raise SystemExit(f"Conflicting duplicate runtime file: {dst}")
+
+def extract_zips(root, out):
+    out.mkdir(parents=True, exist_ok=True)
+    pending = sorted(root.rglob("*.zip"))
     seen = set()
-
-    for p in input_dir.rglob("*"):
+    for p in sorted(root.rglob("*")):
         if p.is_file() and p.suffix.lower() != ".zip":
-            dest = out_dir / p.relative_to(input_dir)
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(p, dest)
-
+            copy_unique(p, out / p.relative_to(root))
     while pending:
         z = pending.pop(0).resolve()
         if z in seen:
@@ -40,188 +48,133 @@ def extract_all_zips(input_dir: Path, out_dir: Path):
                 rel = Path(info.filename)
                 if rel.is_absolute() or ".." in rel.parts:
                     continue
-                dest = out_dir / rel
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                with src.open(info) as rf, open(dest, "wb") as wf:
+                dst = out / rel
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                tmp = dst.with_name(dst.name + ".part")
+                with src.open(info) as rf, open(tmp, "wb") as wf:
                     shutil.copyfileobj(rf, wf)
-        pending.extend([p for p in out_dir.rglob("*.zip") if p.resolve() not in seen])
+                if dst.exists():
+                    if tmp.stat().st_size == dst.stat().st_size and sha256(tmp) == sha256(dst):
+                        tmp.unlink()
+                    else:
+                        tmp.unlink(missing_ok=True)
+                        raise SystemExit(f"Conflicting duplicate runtime file: {dst}")
+                else:
+                    tmp.replace(dst)
+        pending += [p for p in sorted(out.rglob("*.zip")) if p.resolve() not in seen]
 
-def apk_has_core(apk: Path) -> bool:
+def normalize(payload):
+    manifest = payload / "AndroidManifest.xml"
+    if not manifest.exists():
+        found = sorted(payload.rglob("AndroidManifest.xml"))
+        if found:
+            copy_unique(found[0], manifest)
+
+    dex = [p for p in payload.rglob("classes*.dex") if p.is_file()]
+    def dex_key(p):
+        return (0 if p.name == "classes.dex" else 1,
+                int(re.search(r"(\d+)", p.stem).group(1)) if re.search(r"(\d+)", p.stem) else 0,
+                p.as_posix())
+    for i, src in enumerate(sorted(dex, key=dex_key), 1):
+        dst = payload / ("classes.dex" if i == 1 else f"classes{i}.dex")
+        copy_unique(src, dst) if src.resolve() != dst.resolve() else None
+
+    libs = sorted(p for p in payload.rglob("libminecraftpe.so") if p.is_file())
+    if libs:
+        libdir = payload / "lib" / "arm64-v8a"
+        for src in sorted(libs[0].parent.glob("*.so")):
+            copy_unique(src, libdir / src.name)
+
+def has_core(apk):
     try:
         with zipfile.ZipFile(apk) as z:
-            names = set(z.namelist())
-            return "AndroidManifest.xml" in names and MC_SO in names
+            n = set(z.namelist())
+            return "AndroidManifest.xml" in n and MC_SO in n
     except zipfile.BadZipFile:
         return False
 
-def normalize_split_payload(payload: Path):
-    """Normalize phone-extracted split archives into APK-shaped paths."""
-    manifest = payload / "AndroidManifest.xml"
-    if not manifest.exists():
-        candidates = sorted(p for p in payload.rglob("AndroidManifest.xml") if p.is_file())
-        if candidates:
-            shutil.copy2(candidates[0], manifest)
+def source_apk(payload):
+    apks = sorted(payload.rglob("*.apk"))
+    if apks:
+        core = [p for p in apks if has_core(p)]
+        if core:
+            named = [p for p in core if p.name.lower() in {"base.apk", "minecraft.apk"}]
+            return max(named or core, key=lambda p: p.stat().st_size)
+        raise SystemExit("Only split/config APKs found; no APK contains lib/arm64-v8a/libminecraftpe.so.")
+    if (payload / "AndroidManifest.xml").exists() and list(payload.glob("classes*.dex")) and (payload / MC_SO).exists():
+        return payload / "__reconstructed_minecraft.apk"
+    raise SystemExit("Runtime needs AndroidManifest.xml, classes*.dex and lib/arm64-v8a/libminecraftpe.so.")
 
-    dex = sorted((p for p in payload.rglob("classes*.dex") if p.is_file()),
-                 key=lambda p: (len(p.name), p.as_posix()))
-    if dex:
-        for i, src in enumerate(dex, 1):
-            dst = payload / ("classes.dex" if i == 1 else f"classes{i}.dex")
-            if src.resolve() != dst.resolve():
-                shutil.copy2(src, dst)
+def rebuild(payload, apk):
+    with zipfile.ZipFile(apk, "w") as z:
+        for p in sorted(payload.rglob("*")):
+            if p.is_file() and p != apk:
+                z.write(p, p.relative_to(payload).as_posix(),
+                        compress_type=zipfile.ZIP_STORED if p.suffix.lower() in STORED else zipfile.ZIP_DEFLATED)
 
-    mc_candidates = sorted(p for p in payload.rglob("libminecraftpe.so") if p.is_file())
-    if mc_candidates:
-        source_dir = mc_candidates[0].parent
-        lib_dir = payload / "lib" / "arm64-v8a"
-        lib_dir.mkdir(parents=True, exist_ok=True)
-        for src in sorted(source_dir.glob("*.so")):
-            dst = lib_dir / src.name
-            if src.resolve() != dst.resolve():
-                shutil.copy2(src, dst)
-
-
-def locate_source(payload: Path) -> Path:
-    apks = list(payload.rglob("*.apk"))
-    if not apks:
-        # The user's Bedrock payload may be split across filemc*.zip and
-        # assets*.zip archives. extract_all_zips() has already flattened those
-        # archives into one APK-shaped directory at this point.
-        manifest = payload / "AndroidManifest.xml"
-        dex_files = list(payload.glob("classes*.dex"))
-        core = payload / MC_SO
-        if manifest.exists() and dex_files and core.exists():
-            return payload / "__reconstructed_minecraft.apk"
-        raise SystemExit(
-            "Minecraft payload needs a universal APK or a complete split set "
-            "containing AndroidManifest.xml, classes*.dex and lib/arm64-v8a/libminecraftpe.so"
-        )
-
-    # Prefer an APK that already contains the complete ARM64 Minecraft runtime.
-    # This avoids accidentally selecting a density/config split from an XAPK.
-    core = [p for p in apks if apk_has_core(p)]
-    if core:
-        base_named = [p for p in core if p.name.lower() in {"base.apk", "minecraft.apk"}]
-        return max(base_named or core, key=lambda p: p.stat().st_size)
-
-    raise SystemExit(
-        "Minecraft input contains only split/config APKs. Provide a universal APK "
-        "that contains lib/arm64-v8a/libminecraftpe.so."
-    )
-
-def rebuild_raw(payload: Path, out: Path):
-    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
-        for p in payload.rglob("*"):
-            if p.is_file() and p != out:
-                z.write(p, p.relative_to(payload).as_posix())
-
-def build_reconstructed_source(payload: Path, out: Path):
-    with zipfile.ZipFile(out, "w") as z:
-        for p in payload.rglob("*"):
-            if not p.is_file() or p == out:
-                continue
-            rel = p.relative_to(payload).as_posix()
-            compression = zipfile.ZIP_STORED if p.suffix.lower() == ".so" else zipfile.ZIP_DEFLATED
-            z.write(p, rel, compress_type=compression)
-
-def require_core(payload: Path, source: Path):
-    if source.suffix.lower() == ".apk":
-        with zipfile.ZipFile(source) as z:
-            if MC_SO not in z.namelist():
-                raise SystemExit("Minecraft APK missing lib/arm64-v8a/libminecraftpe.so")
-            if "AndroidManifest.xml" not in z.namelist():
-                raise SystemExit("Minecraft APK missing AndroidManifest.xml")
-        return
-    candidate = payload / MC_SO
-    if not candidate.exists():
-        raise SystemExit("Minecraft parts missing lib/arm64-v8a/libminecraftpe.so")
-
-def patch_manifest(path: Path):
+def patch_manifest(path):
     tree = ET.parse(path)
     root = tree.getroot()
     app = root.find("application")
     if app is None:
-        raise SystemExit("Minecraft manifest has no application")
-
+        raise SystemExit("Decoded Minecraft manifest has no application.")
     name = f"{{{ANDROID_NS}}}name"
     label = f"{{{ANDROID_NS}}}label"
     icon = f"{{{ANDROID_NS}}}icon"
     round_icon = f"{{{ANDROID_NS}}}roundIcon"
     exported = f"{{{ANDROID_NS}}}exported"
-
     app.set(label, "WLZ Client")
     app.set(icon, "@drawable/wlz_icon")
     app.set(round_icon, "@drawable/wlz_icon")
     app.set(name, "com.wlz.client.WlzApplication")
-
-    for activity in list(app.findall("activity")):
-        for filt in list(activity.findall("intent-filter")):
-            actions = [x.get(name) for x in filt.findall("action")]
-            cats = [x.get(name) for x in filt.findall("category")]
-            if "android.intent.action.MAIN" in actions and "android.intent.category.LAUNCHER" in cats:
-                activity.remove(filt)
-
-    def ensure_activity(activity_name: str, is_launcher: bool = False):
-        node = None
-        for a in app.findall("activity"):
-            if a.get(name) == activity_name:
-                node = a
-                break
-        if node is None:
-            node = ET.Element("activity", {name: activity_name})
-            app.append(node)
-        node.set(exported, "true" if is_launcher else "false")
-        return node
-
-    main = ensure_activity("com.wlz.client.MainActivity", True)
-    for filt in list(main.findall("intent-filter")):
-        actions = [x.get(name) for x in filt.findall("action")]
-        if "android.intent.action.MAIN" in actions:
-            main.remove(filt)
+    for a in list(app.findall("activity")):
+        for f in list(a.findall("intent-filter")):
+            acts = [x.get(name) for x in f.findall("action")]
+            cats = [x.get(name) for x in f.findall("category")]
+            if "android.intent.action.MAIN" in acts and "android.intent.category.LAUNCHER" in cats:
+                a.remove(f)
+    def ensure(n, launch=False):
+        a = next((x for x in app.findall("activity") if x.get(name) == n), None)
+        if a is None:
+            a = ET.SubElement(app, "activity", {name: n})
+        a.set(exported, "true" if launch else "false")
+        return a
+    main = ensure("com.wlz.client.MainActivity", True)
     f = ET.SubElement(main, "intent-filter")
     ET.SubElement(f, "action", {name: "android.intent.action.MAIN"})
     ET.SubElement(f, "category", {name: "android.intent.category.LAUNCHER"})
-
-    ensure_activity("com.wlz.client.WlzControlEditorActivity", False)
-
+    ensure("com.wlz.client.WlzControlEditorActivity")
     tree.write(path, encoding="utf-8", xml_declaration=True)
 
-def next_dex_name(names):
-    ids = []
-    for n in names:
+def next_dex(existing):
+    nums = []
+    for n in existing:
         m = re.fullmatch(r"classes([0-9]*)\.dex", Path(n).name)
         if m:
-            ids.append(1 if not m.group(1) else int(m.group(1)))
-    n = max(ids or [1]) + 1
+            nums.append(1 if not m.group(1) else int(m.group(1)))
+    n = max(nums or [1]) + 1
     return "classes.dex" if n == 1 else f"classes{n}.dex"
 
-def inject_wlz(helper_apk: Path, base_apk: Path, out_apk: Path):
-    with zipfile.ZipFile(helper_apk) as helper:
-        wlz_dex = {
-            n: helper.read(n)
-            for n in helper.namelist()
-            if re.fullmatch(r"classes[0-9]*\.dex", Path(n).name)
-        }
-        wlz_libs = {
-            n: helper.read(n)
-            for n in helper.namelist()
-            if n.startswith("lib/arm64-v8a/") and n.endswith(".so")
-        }
-
-    with zipfile.ZipFile(base_apk) as base, zipfile.ZipFile(out_apk, "w", zipfile.ZIP_DEFLATED) as out:
-        names = set(base.namelist())
-        for info in base.infolist():
-            out.writestr(info, base.read(info.filename))
-        # Preserve every WLZ dex shard. Injecting only classes.dex would drop
-        # the Java classes in classes2.dex from the current helper build.
-        existing = set(names)
-        for _, data in sorted(wlz_dex.items()):
-            name = next_dex_name(existing)
-            out.writestr(name, data)
+def inject(helper, base, out):
+    with zipfile.ZipFile(helper) as h:
+        dex = [n for n in h.namelist() if re.fullmatch(r"classes[0-9]*\.dex", Path(n).name)]
+        libs = [(n, h.read(n)) for n in h.namelist() if n.startswith("lib/arm64-v8a/") and n.endswith(".so")]
+    with zipfile.ZipFile(base) as b, zipfile.ZipFile(out, "w") as z:
+        existing = set(b.namelist())
+        for info in b.infolist():
+            z.writestr(info, b.read(info.filename),
+                       compress_type=zipfile.ZIP_STORED if Path(info.filename).suffix.lower() in STORED else info.compress_type)
+        for n in sorted(dex, key=lambda x: (0 if Path(x).name == "classes.dex" else 1, x)):
+            name = next_dex(existing)
+            z.writestr(name, b"" if False else h_read(helper, n), compress_type=zipfile.ZIP_DEFLATED)
             existing.add(name)
-        for n, data in wlz_libs.items():
-            if n not in names:
-                out.writestr(n, data)
+        for n, data in libs:
+            if n not in existing:
+                z.writestr(n, data, compress_type=zipfile.ZIP_STORED)
+
+def h_read(path, name):
+    with zipfile.ZipFile(path) as z:
+        return z.read(name)
 
 def main():
     ap = argparse.ArgumentParser()
@@ -229,37 +182,30 @@ def main():
     ap.add_argument("--wlz-apk", required=True)
     ap.add_argument("--apktool", required=True)
     ap.add_argument("--out", required=True)
-    args = ap.parse_args()
-
-    input_dir = Path(args.input).resolve()
-    out = Path(args.out).resolve()
-    payload = Path(tempfile.mkdtemp(prefix="wlz-mc-payload-"))
-    decoded = Path(tempfile.mkdtemp(prefix="wlz-mc-decoded-"))
+    a = ap.parse_args()
+    payload = Path(tempfile.mkdtemp(prefix="wlz-payload-"))
+    decoded = Path(tempfile.mkdtemp(prefix="wlz-decoded-"))
     rebuilt = Path(tempfile.mktemp(suffix=".apk"))
-
     try:
-        extract_all_zips(input_dir, payload)
-        normalize_split_payload(payload)
-        source = locate_source(payload)
-        if source == payload / "__reconstructed_minecraft.apk":
-            build_reconstructed_source(payload, source)
-        require_core(payload, source)
-
-        run(["java", "-jar", args.apktool, "d", "-f", str(source), "-o", str(decoded)])
+        root = Path(a.input).resolve()
+        extract_zips(root, payload)
+        normalize(payload)
+        source = source_apk(payload)
+        if source.name == "__reconstructed_minecraft.apk":
+            rebuild(payload, source)
+        run(["java", "-jar", a.apktool, "d", "-f", str(source), "-o", str(decoded)])
         manifest = decoded / "AndroidManifest.xml"
         if not manifest.exists():
-            raise SystemExit("Decoded Minecraft APK has no AndroidManifest.xml")
-
+            raise SystemExit("Apktool did not produce AndroidManifest.xml")
         patch_manifest(manifest)
-        icon_dst = decoded / "res" / "drawable" / "wlz_icon.xml"
-        icon_dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(Path("patch/wlz_icon.xml"), icon_dst)
-
-        run(["java", "-jar", args.apktool, "b", str(decoded), "-o", str(rebuilt)])
-        out.parent.mkdir(parents=True, exist_ok=True)
-        temp = out.with_suffix(".tmp.apk")
-        inject_wlz(Path(args.wlz_apk).resolve(), rebuilt, temp)
-        shutil.move(temp, out)
+        icon = decoded / "res" / "drawable" / "wlz_icon.xml"
+        icon.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2("patch/wlz_icon.xml", icon)
+        run(["java", "-jar", a.apktool, "b", str(decoded), "-o", str(rebuilt)])
+        out = Path(a.out).resolve()
+        tmp = out.with_suffix(".tmp.apk")
+        inject(Path(a.wlz_apk).resolve(), rebuilt, tmp)
+        tmp.replace(out)
         print("Embedded WLZ Minecraft client:", out)
     finally:
         shutil.rmtree(payload, ignore_errors=True)
