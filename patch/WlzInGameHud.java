@@ -50,7 +50,6 @@ public final class WlzInGameHud {
     private final FrameLayout decor;
     private final FrameLayout layer;
     private final View circle;
-    private final Button[] quickButtons = new Button[5];
 
     private TextView fpsText;
     private View brightLayer;
@@ -78,7 +77,6 @@ public final class WlzInGameHud {
         layer.addView(circle, cp);
         makeDraggable(circle, cp, "hud_x", "hud_y", true);
 
-        buildQuickButtons();
         installKeyHook();
         applyVisuals();
     }
@@ -149,77 +147,6 @@ public final class WlzInGameHud {
         WlzLogoView b = new WlzLogoView(activity);
         b.setContentDescription("WLZ ClickGUI");
         return b;
-    }
-
-    private void buildQuickButtons() {
-        String[] labels = {"ZOOM", "LOOK", "DROP", "SPRINT", "WLZ"};
-        int[] actions = {0, 1, 2, 6, -1};
-
-        for (int i = 0; i < labels.length; i++) {
-            final int slot = i;
-            final int action = actions[i];
-
-            Button b = new Button(activity);
-            b.setText(labels[i]);
-            b.setTextColor(TEXT);
-            b.setTextSize(8.5f);
-            b.setAllCaps(false);
-            b.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
-            b.setPadding(dp(2), 0, dp(2), 0);
-            b.setBackground(round(ROW, STROKE, 1, 10));
-
-            FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(dp(72), dp(42));
-            SharedPreferences cp = controlPrefs();
-            p.leftMargin = cp.getInt("x_" + slot, dp(12 + (slot % 3) * 80));
-            p.topMargin = cp.getInt("y_" + slot, dp(194 + (slot / 3) * 52));
-
-            layer.addView(b, p);
-            quickButtons[slot] = b;
-
-            b.setOnTouchListener(new View.OnTouchListener() {
-                float downX, downY;
-                int startX, startY;
-                boolean moved;
-
-                @Override
-                public boolean onTouch(View view, MotionEvent event) {
-                    FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) view.getLayoutParams();
-                    if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
-                        downX = event.getRawX();
-                        downY = event.getRawY();
-                        startX = lp.leftMargin;
-                        startY = lp.topMargin;
-                        moved = false;
-                        return true;
-                    }
-                    if (event.getActionMasked() == MotionEvent.ACTION_MOVE) {
-                        int nx = startX + (int) (event.getRawX() - downX);
-                        int ny = startY + (int) (event.getRawY() - downY);
-                        nx = Math.max(0, Math.min(nx, decor.getWidth() - view.getWidth()));
-                        ny = Math.max(0, Math.min(ny, decor.getHeight() - view.getHeight()));
-                        lp.leftMargin = nx;
-                        lp.topMargin = ny;
-                        view.setLayoutParams(lp);
-                        controlPrefs().edit().putInt("x_" + slot, nx).putInt("y_" + slot, ny).apply();
-                        moved = true;
-                        return true;
-                    }
-                    if (event.getActionMasked() == MotionEvent.ACTION_UP) {
-                        if (!moved) {
-                            if (action < 0) {
-                                togglePanel();
-                            } else {
-                                boolean enabled = WlzModuleManager.isModuleEnabled(activity, action);
-                                WlzModuleManager.setModuleEnabled(activity, action, !enabled);
-                                applyVisuals();
-                            }
-                        }
-                        return true;
-                    }
-                    return true;
-                }
-            });
-        }
     }
 
     private void togglePanel() {
@@ -364,23 +291,6 @@ public final class WlzInGameHud {
         if (WlzModuleManager.isModuleEnabled(activity, 8)) startFps();
         else stopFps();
 
-        updateQuickButtonVisuals();
-    }
-
-    private void updateQuickButtonVisuals() {
-        int[] actions = {0, 1, 2, 6, -1};
-        for (int i = 0; i < quickButtons.length; i++) {
-            Button b = quickButtons[i];
-            if (b == null) continue;
-            int action = actions[i];
-            if (action >= 0 && WlzModuleManager.isModuleEnabled(activity, action)) {
-                b.setBackground(round(ORANGE, ORANGE_LIGHT, 1, 10));
-            } else if (action < 0) {
-                b.setBackground(round(ORANGE, TEXT, 1, 10));
-            } else {
-                b.setBackground(round(ROW, STROKE, 1, 10));
-            }
-        }
     }
 
     private void applyUnlockFps() {
