@@ -1,42 +1,33 @@
-# WLZ Client v0.8.1
+# WLZ Client v0.9.0
 
 - Android 9+ (minSdk 28)
-- arm64-v8a first
-- Minecraft target package: `com.mojang.minecraftpe`
-- Simple WLZ splash and orange/graphite control UI.
-- Distinct WLZ monogram icon for launcher, splash and floating shortcut.
-- WLZ preload service with persistent floating circular shortcut.
-- WLZ module manager and native runtime bridge.
-- Modules and Fix Lag profiles are persisted locally.
-- The client code is an independent WLZ implementation. The supplied Flarial APK was used only as an architectural reference, not as a binary/code dependency.
+- arm64-v8a
+- WLZ is designed as a single-app Minecraft client: launcher, Minecraft Activity and WLZ HUD live in one APK.
+- No overlay permission is used.
+- Circular in-game WLZ logo opens ClickGUI.
+- OTG keyboard mapping and draggable touch controls are persisted locally.
+- Fix Lag profiles are stored locally.
+- The supplied Minecraft runtime is expected under `minecraft_input/` during the build.
+- Flarial was used only as an architectural reference. No Flarial binary or source is bundled.
 
-## Runtime architecture
+## Single-app runtime
 
 ```
-WLZ Launcher
-    |
-    v
-WlzPreloadService
-    |
-    +--> WlzRuntimeBridge / libwlzruntime.so
-    |
-    +--> WlzOverlayController
-              |
-              +--> circular WLZ shortcut
-              +--> ClickGUI / modules / Fix Lag
+WLZ MainActivity
+   |
+   v
+embedded com.mojang.minecraftpe.MainActivity
+   |
+   +--> WlzApplication lifecycle bridge
+   +--> WlzInGameHud / WLZ logo / ClickGUI
+   +--> WlzKeyMapper / touch controls
+   +--> libwlzruntime.so
 ```
 
-The floating shortcut is intentionally implemented as WLZ code and uses the WLZ icon.
-
-## Important limitation
-
-The repository does not bundle Minecraft's proprietary binary and does not include a copied Flarial native client. Because Android keeps Minecraft in a separate application process, this WLZ runtime does not by itself patch `libminecraftpe.so` or alter Minecraft's internal render/input/camera code.
-
-The module manager and native runtime are therefore a clean integration layer for a future game-side hook/runtime. The UI state is real and persisted, but toggling a module is not claimed here to change Minecraft internals.
+The embed step requires the ARM64 Minecraft native core:
+`lib/arm64-v8a/libminecraftpe.so`.
+Without that file the build intentionally stops instead of producing a fake "Minecraft" APK.
 
 ## Build
 
-Requires Android SDK 35, JDK 17 and Gradle 8.7. GitHub Actions is included.
-
-
-<!-- WLZ 0.8: embedded-Minecraft launch path + in-app HUD activity; no overlay permission. -->
+GitHub Actions builds a small WLZ helper first. When `minecraft_input/` contains the Minecraft APK or all required split parts, the workflow builds the single APK and signs the CI artifact.
