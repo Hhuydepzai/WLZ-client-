@@ -57,13 +57,18 @@ def apk_has_core(apk: Path) -> bool:
 def locate_source(payload: Path) -> Path:
     apks = list(payload.rglob("*.apk"))
     if not apks:
+        # The user's Bedrock payload may be split across filemc*.zip and
+        # assets*.zip archives. extract_all_zips() has already flattened those
+        # archives into one APK-shaped directory at this point.
         manifest = payload / "AndroidManifest.xml"
-        dex = payload / "classes.dex"
-        if not manifest.exists() or not dex.exists():
-            raise SystemExit(
-                "Minecraft payload needs a universal APK or AndroidManifest.xml + classes.dex"
-            )
-        return payload / "__reconstructed_minecraft.apk"
+        dex_files = list(payload.glob("classes*.dex"))
+        core = payload / MC_SO
+        if manifest.exists() and dex_files and core.exists():
+            return payload / "__reconstructed_minecraft.apk"
+        raise SystemExit(
+            "Minecraft payload needs a universal APK or a complete split set "
+            "containing AndroidManifest.xml, classes*.dex and lib/arm64-v8a/libminecraftpe.so"
+        )
 
     # Prefer an APK that already contains the complete ARM64 Minecraft runtime.
     # This avoids accidentally selecting a density/config split from an XAPK.
@@ -82,6 +87,16 @@ def rebuild_raw(payload: Path, out: Path):
         for p in payload.rglob("*"):
             if p.is_file() and p != out:
                 z.write(p, p.relative_to(payload).as_posix())
+
+def build_reconstructed_source(payload: Path, out: Path):
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+        for p in payload.rglob("*"):
+            if not p.is_file() or p == out:
+                continue
+            rel = p.relative_to(payload).as_posix()
+            # The source directory is assembled from user-supplied split
+            # archives, so preserve every APK entry exactly once.
+            z.write(p, rel)
 
 def require_core(payload: Path, source: Path):
     if source.suffix.lower() == ".apk":
@@ -190,7 +205,7 @@ def main():
         extract_all_zips(input_dir, payload)
         source = locate_source(payload)
         if source == payload / "__reconstructed_minecraft.apk":
-            rebuild_raw(payload, source)
+            build_reconstructed_source(payload, source)
         require_core(payload, source)
 
         run(["java", "-jar", args.apktool, "d", "-f", str(source), "-o", str(decoded)])
