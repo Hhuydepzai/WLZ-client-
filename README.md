@@ -30,7 +30,7 @@ Without that file the build intentionally stops instead of producing a fake "Min
 
 ## Build
 
-GitHub Actions builds a small WLZ helper first. When `minecraft_input/` contains the Minecraft APK or all required split parts, the workflow builds the single APK and signs the CI artifact.
+GitHub Actions builds a small WLZ helper first. When `minecraft_input/` contains the Minecraft APK or the supplied `filemc*.zip` + `assets*.zip` split set, the workflow builds the single APK and signs the CI artifact.
 
 
 ### Runtime tích hợp Minecraft
@@ -43,7 +43,7 @@ File đầu vào tối thiểu cho đường build này là APK Minecraft có:
 - `lib/arm64-v8a/libminecraftpe.so`
 - assets/resources đi kèm của chính APK
 
-Đặt APK vào `minecraft_input/`. Với XAPK/APKS dạng split, nên dùng bản **universal APK** chứa đủ runtime trước khi build, vì Android resource split không thể ghép an toàn chỉ bằng cách nối ZIP.
+Đặt APK vào `minecraft_input/`. Với bộ split dạng `filemc*.zip` + `assets*.zip`, CI ghép toàn bộ file thành một APK-shaped runtime trước khi rebuild. Không cần cài Minecraft riêng.
 
 Native WLZ 1.0.0 hiện có capability detection theo signature. Các module chỉ xuất hiện trong ClickGUI khi backend tương ứng thực sự resolve được: Zoom, Unlock FPS, Fullbright, Snaplook. FPS Counter là module HUD. Các module chưa có adapter đúng phiên bản sẽ bị ẩn thay vì hiển thị nút giả.
 
