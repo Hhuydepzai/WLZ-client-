@@ -19,10 +19,7 @@ public final class WlzBootstrapProvider extends ContentProvider {
         WlzModuleManager.initialize(app);
 
         callbacks = new Application.ActivityLifecycleCallbacks() {
-            @Override public void onActivityCreated(Activity activity, Bundle state) {
-                if (isMinecraft(activity)) WlzSplash.show(activity);
-            }
-
+            @Override public void onActivityCreated(Activity activity, Bundle state) {}
             @Override public void onActivityResumed(final Activity activity) {
                 if (!isMinecraft(activity)) return;
 
