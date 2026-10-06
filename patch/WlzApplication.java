@@ -1,10 +1,9 @@
 package com.wlz.client;
 
 import android.app.Activity;
-import android.app.Application;
 import android.os.Bundle;
 
-public final class WlzApplication extends Application {
+public final class WlzApplication extends com.pairip.application.Application {
     private final ActivityLifecycleCallbacks callbacks = new ActivityLifecycleCallbacks() {
         @Override public void onActivityCreated(Activity activity, Bundle state) {}
 
