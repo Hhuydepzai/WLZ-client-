@@ -52,7 +52,6 @@ public final class WlzInGameHud {
     private final View circle;
 
     private TextView fpsText;
-    private View brightLayer;
     private LinearLayout panel;
     private boolean panelVisible;
 
@@ -191,6 +190,8 @@ public final class WlzInGameHud {
 
         for (int i = 0; i < NAMES.length; i++) {
             final int idx = i;
+            if (!WlzModuleManager.isModuleSupported(activity, idx)) continue;
+
             LinearLayout row = new LinearLayout(activity);
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(7), dp(3), dp(4), dp(3));
@@ -262,35 +263,12 @@ public final class WlzInGameHud {
     }
 
     private void applyVisuals() {
-        boolean zoom = WlzModuleManager.isModuleEnabled(activity, 0);
-        SurfaceView sv = findSurfaceView(decor);
-        if (sv != null) {
-            sv.setPivotX(sv.getWidth() / 2f);
-            sv.setPivotY(sv.getHeight() / 2f);
-            float scale = zoom ? 1.22f : 1.0f;
-            sv.setScaleX(scale);
-            sv.setScaleY(scale);
-        }
-
+        // Gameplay-changing modules are applied by wlzruntime inside
+        // libminecraftpe.so. The Java HUD only owns presentation controls.
         applyUnlockFps();
-
-        boolean bright = WlzModuleManager.isModuleEnabled(activity, 4);
-        if (bright) {
-            if (brightLayer == null) {
-                brightLayer = new View(activity);
-                brightLayer.setBackgroundColor(Color.WHITE);
-                brightLayer.setAlpha(0.10f);
-                FrameLayout.LayoutParams bp = new FrameLayout.LayoutParams(-1, -1);
-                layer.addView(brightLayer, 0, bp);
-            }
-            brightLayer.setVisibility(View.VISIBLE);
-        } else if (brightLayer != null) {
-            brightLayer.setVisibility(View.GONE);
-        }
 
         if (WlzModuleManager.isModuleEnabled(activity, 8)) startFps();
         else stopFps();
-
     }
 
     private void applyUnlockFps() {
@@ -330,17 +308,6 @@ public final class WlzInGameHud {
         } catch (Throwable ignored) {
         }
         return max;
-    }
-
-    private SurfaceView findSurfaceView(View v) {
-        if (v instanceof SurfaceView) return (SurfaceView) v;
-        if (!(v instanceof ViewGroup)) return null;
-        ViewGroup g = (ViewGroup) v;
-        for (int i = 0; i < g.getChildCount(); i++) {
-            SurfaceView s = findSurfaceView(g.getChildAt(i));
-            if (s != null) return s;
-        }
-        return null;
     }
 
     private final Choreographer.FrameCallback frameCallback = new Choreographer.FrameCallback() {
