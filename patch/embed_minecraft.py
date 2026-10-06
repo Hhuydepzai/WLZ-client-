@@ -174,7 +174,7 @@ def inject_wlz(helper_apk: Path, base_apk: Path, out_apk: Path):
         wlz_dex = {
             n: helper.read(n)
             for n in helper.namelist()
-            if re.fullmatch(r"classes[0-9]*\\.dex", Path(n).name)
+            if re.fullmatch(r"classes[0-9]*\.dex", Path(n).name)
         }
         wlz_libs = {
             n: helper.read(n)
