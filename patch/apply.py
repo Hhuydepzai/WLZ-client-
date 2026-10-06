@@ -56,6 +56,7 @@ prepare_pairip_stub()
 for name in [
     "MainActivity.java",
     "WlzApplication.java",
+    "WlzBootstrapProvider.java",
     "WlzLogoView.java",
     "WlzModuleManager.java",
     "WlzRuntimeBridge.java",
