@@ -7,13 +7,21 @@ concurrency:
 on:
   workflow_dispatch:
     inputs:
-      minecraft_url:
-        description: "Direct URL to the user-supplied Minecraft runtime ZIP/APK"
+      minecraft_manifest_url:
+        description: "Direct URL to AndroidManifest.xml"
         required: true
         type: string
-      minecraft_sha256:
-        description: "Optional SHA-256 of the runtime download"
-        required: false
+      minecraft_arm64_url:
+        description: "Direct URL to arm64-v8a.zip"
+        required: true
+        type: string
+      minecraft_dex_url:
+        description: "Direct URL to dex.zip"
+        required: true
+        type: string
+      minecraft_lib_url:
+        description: "Direct URL to libminecraftpe.so"
+        required: true
         type: string
 
 jobs:
@@ -36,39 +44,49 @@ jobs:
           unzip -q app.zip
           unzip -q tools.zip
 
-      - name: Download and validate Minecraft runtime
+      - name: Download four Minecraft runtime parts
         shell: bash
         run: |
           set -euo pipefail
-          URL="${{ inputs.minecraft_url }}"
-          case "$URL" in
-            https://*|http://*) ;;
-            *) echo "minecraft_url must be a direct http(s) URL to the runtime ZIP/APK"; exit 1 ;;
-          esac
-
           mkdir -p minecraft_input
-          curl -fL --retry 3 --retry-delay 2 "$URL" -o minecraft_input/runtime.bin
 
-          if [ -n "${{ inputs.minecraft_sha256 }}" ]; then
-            echo "${{ inputs.minecraft_sha256 }}  minecraft_input/runtime.bin" | sha256sum -c -
-          fi
+          download() {
+            local name="$1"
+            local url="$2"
+            case "$url" in
+              https://*|http://*) ;;
+              *) echo "$name must be a direct http(s) URL"; exit 1 ;;
+            esac
+            echo "Downloading $name"
+            curl -fL --retry 4 --retry-delay 2 "$url" -o "minecraft_input/$name"
+            test -s "minecraft_input/$name"
+            echo "$name: $(stat -c '%s' "minecraft_input/$name") bytes"
+          }
 
-          test -s minecraft_input/runtime.bin
-          SIZE="$(stat -c '%s' minecraft_input/runtime.bin)"
-          echo "Runtime download: $SIZE bytes"
-          if [ "$SIZE" -lt 20000000 ]; then
-            echo "Downloaded file is far too small to be a Minecraft Bedrock runtime."
+          download AndroidManifest.xml "${{ inputs.minecraft_manifest_url }}"
+          download arm64-v8a.zip "${{ inputs.minecraft_arm64_url }}"
+          download dex.zip "${{ inputs.minecraft_dex_url }}"
+          download libminecraftpe.so "${{ inputs.minecraft_lib_url }}"
+
+          file minecraft_input/AndroidManifest.xml
+          file minecraft_input/arm64-v8a.zip
+          file minecraft_input/dex.zip
+          file minecraft_input/libminecraftpe.so
+
+          unzip -tq minecraft_input/arm64-v8a.zip
+          unzip -tq minecraft_input/dex.zip
+
+          if ! grep -a -q "com.mojang.minecraftpe.MainActivity" minecraft_input/AndroidManifest.xml; then
+            echo "AndroidManifest.xml does not contain com.mojang.minecraftpe.MainActivity"
             exit 1
           fi
 
-          case "$(file -b --mime-type minecraft_input/runtime.bin)" in
-            application/zip|application/vnd.android.package-archive|application/octet-stream) ;;
-            *) echo "Runtime download does not look like ZIP/APK"; exit 1 ;;
-          esac
+          if ! grep -a -q "classes" minecraft_input/dex.zip; then
+            echo "dex.zip does not appear to contain classes*.dex"
+            exit 1
+          fi
 
-          mv minecraft_input/runtime.bin minecraft_input/runtime.zip
-          unzip -tq minecraft_input/runtime.zip
-          echo "Runtime archive is a valid ZIP/APK."
+          echo "Minecraft runtime parts validated."
 
       - name: Apply WLZ patch
         run: |
@@ -89,6 +107,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
+
           APKTOOL_URL="$(curl -fsSL https://api.github.com/repos/iBotPeaches/Apktool/releases/latest | jq -r '.assets[] | select(.name | endswith(".jar")) | .browser_download_url' | head -n 1)"
           test -n "$APKTOOL_URL"
           curl -fL "$APKTOOL_URL" -o apktool.jar
