@@ -171,7 +171,11 @@ def next_dex_name(names):
 
 def inject_wlz(helper_apk: Path, base_apk: Path, out_apk: Path):
     with zipfile.ZipFile(helper_apk) as helper:
-        wlz_dex = helper.read("classes.dex")
+        wlz_dex = {
+            n: helper.read(n)
+            for n in helper.namelist()
+            if re.fullmatch(r"classes[0-9]*\\.dex", Path(n).name)
+        }
         wlz_libs = {
             n: helper.read(n)
             for n in helper.namelist()
@@ -182,7 +186,13 @@ def inject_wlz(helper_apk: Path, base_apk: Path, out_apk: Path):
         names = set(base.namelist())
         for info in base.infolist():
             out.writestr(info, base.read(info.filename))
-        out.writestr(next_dex_name(names), wlz_dex)
+        # Preserve every WLZ dex shard. Injecting only classes.dex would drop
+        # the Java classes in classes2.dex from the current helper build.
+        existing = set(names)
+        for _, data in sorted(wlz_dex.items()):
+            name = next_dex_name(existing)
+            out.writestr(name, data)
+            existing.add(name)
         for n, data in wlz_libs.items():
             if n not in names:
                 out.writestr(n, data)
