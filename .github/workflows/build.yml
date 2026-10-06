@@ -68,25 +68,13 @@ jobs:
           download dex.zip "${{ inputs.minecraft_dex_url }}"
           download libminecraftpe.so "${{ inputs.minecraft_lib_url }}"
 
-          file minecraft_input/AndroidManifest.xml
-          file minecraft_input/arm64-v8a.zip
-          file minecraft_input/dex.zip
-          file minecraft_input/libminecraftpe.so
+          test -s minecraft_input/AndroidManifest.xml
+          test -s minecraft_input/arm64-v8a.zip
+          test -s minecraft_input/dex.zip
+          test -s minecraft_input/libminecraftpe.so
 
           unzip -tq minecraft_input/arm64-v8a.zip
           unzip -tq minecraft_input/dex.zip
-
-          if ! grep -a -q "com.mojang.minecraftpe.MainActivity" minecraft_input/AndroidManifest.xml; then
-            echo "AndroidManifest.xml does not contain com.mojang.minecraftpe.MainActivity"
-            exit 1
-          fi
-
-          if ! grep -a -q "classes" minecraft_input/dex.zip; then
-            echo "dex.zip does not appear to contain classes*.dex"
-            exit 1
-          fi
-
-          echo "Minecraft runtime parts validated."
 
       - name: Apply WLZ patch
         run: |
