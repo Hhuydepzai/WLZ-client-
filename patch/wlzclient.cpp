@@ -227,7 +227,10 @@ void installZoomHook() {
     if (g_zoomHooked) return;
     uintptr_t a=resolveSignature("? ? ? FC ? ? ? 6D ? ? ? A9 ? ? ? F9 ? ? ? A9 ? ? ? 91 08 40 20 1E");
     if (!a) return;
-    if (installInlineHook(reinterpret_cast<void*>(a),reinterpret_cast<void*>(&getFovHook),reinterpret_cast<void**>(&g_getFovOrig))) {
+    void* tramp=nullptr;
+    if (installInlineHook(reinterpret_cast<void*>(a),reinterpret_cast<void*>(&getFovHook),&tramp)) {
+        g_getFovOrig=reinterpret_cast<GetFovFn>(tramp);
+        g_zoomTrampoline=tramp;
         g_zoomHooked=true;
     }
 }
@@ -237,7 +240,8 @@ void installTurnHook() {
     uintptr_t a=resolveSignature("? ? ? D1 ? ? ? FD ? ? ? A9 ? ? ? A9 ? ? ? A9 ? ? ? A9 ? ? ? 91 56 D0 3B D5 F3 03 00 AA F4 03 01 AA ? ? ? F9 ? ? ? F8 ? ? ? F9 ? ? ? F9");
     if (!a) return;
     void* tramp=nullptr;
-    if (installInlineHook(reinterpret_cast<void*>(a),reinterpret_cast<void*>(&turnDeltaHook),reinterpret_cast<void**>(&g_turnOrig))) {
+    if (installInlineHook(reinterpret_cast<void*>(a),reinterpret_cast<void*>(&turnDeltaHook),&tramp)) {
+        g_turnOrig=reinterpret_cast<TurnDeltaFn>(tramp);
         g_turnTrampoline=tramp;
         g_turnHooked=true;
     }
