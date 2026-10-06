@@ -46,15 +46,36 @@ def extract_all_zips(input_dir: Path, out_dir: Path):
                     shutil.copyfileobj(rf, wf)
         pending.extend([p for p in out_dir.rglob("*.zip") if p.resolve() not in seen])
 
+def apk_has_core(apk: Path) -> bool:
+    try:
+        with zipfile.ZipFile(apk) as z:
+            names = set(z.namelist())
+            return "AndroidManifest.xml" in names and MC_SO in names
+    except zipfile.BadZipFile:
+        return False
+
 def locate_source(payload: Path) -> Path:
-    apks = sorted(payload.rglob("*.apk"), key=lambda p: p.stat().st_size, reverse=True)
-    if apks:
-        return apks[0]
-    manifest = payload / "AndroidManifest.xml"
-    dex = payload / "classes.dex"
-    if not manifest.exists() or not dex.exists():
-        raise SystemExit("Minecraft payload needs an APK or AndroidManifest.xml + classes.dex")
-    return payload / "__reconstructed_minecraft.apk"
+    apks = list(payload.rglob("*.apk"))
+    if not apks:
+        manifest = payload / "AndroidManifest.xml"
+        dex = payload / "classes.dex"
+        if not manifest.exists() or not dex.exists():
+            raise SystemExit(
+                "Minecraft payload needs a universal APK or AndroidManifest.xml + classes.dex"
+            )
+        return payload / "__reconstructed_minecraft.apk"
+
+    # Prefer an APK that already contains the complete ARM64 Minecraft runtime.
+    # This avoids accidentally selecting a density/config split from an XAPK.
+    core = [p for p in apks if apk_has_core(p)]
+    if core:
+        base_named = [p for p in core if p.name.lower() in {"base.apk", "minecraft.apk"}]
+        return max(base_named or core, key=lambda p: p.stat().st_size)
+
+    raise SystemExit(
+        "Minecraft input contains only split/config APKs. Provide a universal APK "
+        "that contains lib/arm64-v8a/libminecraftpe.so."
+    )
 
 def rebuild_raw(payload: Path, out: Path):
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
