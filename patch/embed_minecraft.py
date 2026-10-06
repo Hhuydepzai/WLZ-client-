@@ -54,6 +54,33 @@ def apk_has_core(apk: Path) -> bool:
     except zipfile.BadZipFile:
         return False
 
+def normalize_split_payload(payload: Path):
+    """Normalize phone-extracted split archives into APK-shaped paths."""
+    manifest = payload / "AndroidManifest.xml"
+    if not manifest.exists():
+        candidates = sorted(p for p in payload.rglob("AndroidManifest.xml") if p.is_file())
+        if candidates:
+            shutil.copy2(candidates[0], manifest)
+
+    dex = sorted((p for p in payload.rglob("classes*.dex") if p.is_file()),
+                 key=lambda p: (len(p.name), p.as_posix()))
+    if dex:
+        for i, src in enumerate(dex, 1):
+            dst = payload / ("classes.dex" if i == 1 else f"classes{i}.dex")
+            if src.resolve() != dst.resolve():
+                shutil.copy2(src, dst)
+
+    mc_candidates = sorted(p for p in payload.rglob("libminecraftpe.so") if p.is_file())
+    if mc_candidates:
+        source_dir = mc_candidates[0].parent
+        lib_dir = payload / "lib" / "arm64-v8a"
+        lib_dir.mkdir(parents=True, exist_ok=True)
+        for src in sorted(source_dir.glob("*.so")):
+            dst = lib_dir / src.name
+            if src.resolve() != dst.resolve():
+                shutil.copy2(src, dst)
+
+
 def locate_source(payload: Path) -> Path:
     apks = list(payload.rglob("*.apk"))
     if not apks:
@@ -89,14 +116,13 @@ def rebuild_raw(payload: Path, out: Path):
                 z.write(p, p.relative_to(payload).as_posix())
 
 def build_reconstructed_source(payload: Path, out: Path):
-    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+    with zipfile.ZipFile(out, "w") as z:
         for p in payload.rglob("*"):
             if not p.is_file() or p == out:
                 continue
             rel = p.relative_to(payload).as_posix()
-            # The source directory is assembled from user-supplied split
-            # archives, so preserve every APK entry exactly once.
-            z.write(p, rel)
+            compression = zipfile.ZIP_STORED if p.suffix.lower() == ".so" else zipfile.ZIP_DEFLATED
+            z.write(p, rel, compress_type=compression)
 
 def require_core(payload: Path, source: Path):
     if source.suffix.lower() == ".apk":
@@ -213,6 +239,7 @@ def main():
 
     try:
         extract_all_zips(input_dir, payload)
+        normalize_split_payload(payload)
         source = locate_source(payload)
         if source == payload / "__reconstructed_minecraft.apk":
             build_reconstructed_source(payload, source)
