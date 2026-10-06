@@ -3,7 +3,6 @@ package com.wlz.client;
 import android.app.Activity;
 import android.graphics.Color;
 import android.graphics.Typeface;
-import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
@@ -13,6 +12,8 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 public final class WlzApplication extends com.pairip.application.Application {
+    private static final long NATIVE_ATTACH_DELAY_MS = 3000L;
+
     private final ActivityLifecycleCallbacks callbacks = new ActivityLifecycleCallbacks() {
         @Override public void onActivityCreated(Activity activity, Bundle state) {
             if (isMinecraft(activity)) showSplash(activity);
@@ -20,9 +21,16 @@ public final class WlzApplication extends com.pairip.application.Application {
 
         @Override public void onActivityStarted(Activity activity) {}
 
-        @Override public void onActivityResumed(Activity activity) {
+        @Override public void onActivityResumed(final Activity activity) {
             if (isMinecraft(activity)) {
+                // Attach the native WLZ runtime only after Minecraft has had
+                // time to initialize its own native engine.
                 WlzInGameHud.attach(activity);
+                activity.getWindow().getDecorView().postDelayed(new Runnable() {
+                    @Override public void run() {
+                        WlzModuleManager.initializeNative(activity);
+                    }
+                }, NATIVE_ATTACH_DELAY_MS);
             }
         }
 
@@ -42,6 +50,8 @@ public final class WlzApplication extends com.pairip.application.Application {
     @Override
     public void onCreate() {
         super.onCreate();
+        // Java/UI initialization is safe here. Native code is intentionally
+        // deferred until the Minecraft Activity reaches RESUMED.
         WlzModuleManager.initialize(this);
         registerActivityLifecycleCallbacks(callbacks);
     }
@@ -102,12 +112,6 @@ public final class WlzApplication extends com.pairip.application.Application {
     private static FrameLayout.LayoutParams lp(Activity a, int w, int h) {
         FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(w, h);
         p.gravity = Gravity.CENTER;
-        return p;
-    }
-
-    private static FrameLayout.LayoutParams lp(Activity a, int w, int h, int top) {
-        FrameLayout.LayoutParams p = lp(a, w, h);
-        p.topMargin = top;
         return p;
     }
 
