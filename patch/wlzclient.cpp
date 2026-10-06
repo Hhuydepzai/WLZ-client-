@@ -223,19 +223,24 @@ EGLBoolean swapHook(EGLDisplay display,EGLSurface surface) {
     return g_swapOrig(display,surface);
 }
 
-bool installZoomAndTurn() {
-    bool ok=true;
-    if (!g_zoomHooked) {
-        uintptr_t a=resolveSignature("? ? ? FC ? ? ? 6D ? ? ? A9 ? ? ? F9 ? ? ? A9 ? ? ? 91 08 40 20 1E");
-        if (!a || !installInlineHook(reinterpret_cast<void*>(a),reinterpret_cast<void*>(&getFovHook),reinterpret_cast<void**>(&g_getFovOrig))) ok=false;
-        else g_zoomHooked=true;
+void installZoomHook() {
+    if (g_zoomHooked) return;
+    uintptr_t a=resolveSignature("? ? ? FC ? ? ? 6D ? ? ? A9 ? ? ? F9 ? ? ? A9 ? ? ? 91 08 40 20 1E");
+    if (!a) return;
+    if (installInlineHook(reinterpret_cast<void*>(a),reinterpret_cast<void*>(&getFovHook),reinterpret_cast<void**>(&g_getFovOrig))) {
+        g_zoomHooked=true;
     }
-    if (!g_turnHooked) {
-        uintptr_t a=resolveSignature("? ? ? D1 ? ? ? FD ? ? ? A9 ? ? ? A9 ? ? ? A9 ? ? ? A9 ? ? ? 91 56 D0 3B D5 F3 03 00 AA F4 03 01 AA ? ? ? F9 ? ? ? F8 ? ? ? F9 ? ? ? F9");
-        if (!a || !installInlineHook(reinterpret_cast<void*>(a),reinterpret_cast<void*>(&turnDeltaHook),reinterpret_cast<void**>(&g_turnOrig))) ok=false;
-        else g_turnHooked=true;
+}
+
+void installTurnHook() {
+    if (g_turnHooked) return;
+    uintptr_t a=resolveSignature("? ? ? D1 ? ? ? FD ? ? ? A9 ? ? ? A9 ? ? ? A9 ? ? ? A9 ? ? ? 91 56 D0 3B D5 F3 03 00 AA F4 03 01 AA ? ? ? F9 ? ? ? F8 ? ? ? F9 ? ? ? F9");
+    if (!a) return;
+    void* tramp=nullptr;
+    if (installInlineHook(reinterpret_cast<void*>(a),reinterpret_cast<void*>(&turnDeltaHook),reinterpret_cast<void**>(&g_turnOrig))) {
+        g_turnTrampoline=tramp;
+        g_turnHooked=true;
     }
-    return ok && g_zoomHooked;
 }
 
 bool resolveFullbright() {
@@ -323,10 +328,10 @@ void doSnapNow() {
 
 void refreshCapabilities() {
     uint32_t caps=0;
-    if (installZoomAndTurn()) {
-        caps|=(1u<<0);
-        caps|=(1u<<7); // Snaplook uses actor rotation component through TurnDelta.
-    }
+    installZoomHook();
+    installTurnHook();
+    if (g_zoomHooked) caps|=(1u<<0);
+    if (g_turnHooked) caps|=(1u<<7); // Snaplook uses actor rotation through TurnDelta.
     if (resolveFullbright()) caps|=(1u<<4);
     if (resolveSwapImport()) caps|=(1u<<3);
     g_caps.store(caps);
