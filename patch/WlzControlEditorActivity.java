@@ -63,7 +63,9 @@ public final class WlzControlEditorActivity extends Activity {
         ScrollView scroll = new ScrollView(this);
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
-        for (int i = 0; i < WlzKeyMapper.ACTIONS.length; i++) list.addView(keyRow(i));
+        for (int i = 0; i < WlzKeyMapper.ACTIONS.length; i++) {
+            if (WlzModuleManager.isModuleSupported(this, i)) list.addView(keyRow(i));
+        }
         scroll.addView(list);
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
@@ -74,8 +76,8 @@ public final class WlzControlEditorActivity extends Activity {
         FrameLayout canvas = new FrameLayout(this);
         canvas.setBackground(round(PANEL, STROKE, 1, 16));
 
-        String[] labels = {"ZOOM", "LOOK", "DROP", "SPRINT", "MENU"};
-        int[] actions = {0, 1, 2, 6, -1};
+        String[] labels = {"ZOOM", "FPS", "BRIGHT", "SNAP", "MENU"};
+        int[] actions = {0, 3, 4, 7, -1};
         for (int i = 0; i < labels.length; i++) {
             Button b = touchButton(labels[i], actions[i]);
             FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(dp(78), dp(48));
