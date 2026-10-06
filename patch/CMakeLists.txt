@@ -10,5 +10,9 @@ target_link_options(wlzruntime PRIVATE -Wl,--gc-sections -Wl,--exclude-libs,ALL)
 
 find_library(log-lib log)
 find_library(android-lib android)
+find_library(egl-lib EGL)
 
-target_link_libraries(wlzruntime ${log-lib} ${android-lib})
+target_link_libraries(wlzruntime
+        ${log-lib}
+        ${android-lib}
+        ${egl-lib})
