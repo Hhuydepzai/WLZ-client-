@@ -8,11 +8,19 @@ public final class WlzModuleManager {
     private static final String TAG = "WLZRuntime";
     private static final String PREFS = "wlz_settings";
     private static final int MODULE_COUNT = 9;
+    private static volatile boolean nativeStarted = false;
+
     private WlzModuleManager() {}
 
     public static boolean isModuleSupported(Context context, int index) {
         if (index == 8) return true;
         if (index < 0 || index >= MODULE_COUNT) return false;
+
+        // Do not load the native runtime from the launcher process. Minecraft's
+        // native library must be fully started first, otherwise signature
+        // scanning/hooking can crash the process during startup.
+        if (!nativeStarted) return false;
+
         try {
             return WlzRuntimeBridge.nativeIsModuleSupported(index);
         } catch (Throwable e) {
@@ -31,11 +39,14 @@ public final class WlzModuleManager {
             Log.w(TAG, "Ignoring unsupported module index=" + index);
             return;
         }
+
         prefs(context).edit().putBoolean("m_" + index, enabled).apply();
-        try {
-            WlzRuntimeBridge.nativeSetModule(index, enabled);
-        } catch (Throwable e) {
-            Log.w(TAG, "nativeSetModule unavailable for index=" + index, e);
+        if (nativeStarted) {
+            try {
+                WlzRuntimeBridge.nativeSetModule(index, enabled);
+            } catch (Throwable e) {
+                Log.w(TAG, "nativeSetModule unavailable for index=" + index, e);
+            }
         }
     }
 
@@ -45,24 +56,45 @@ public final class WlzModuleManager {
 
     public static void setParam(Context context, int key, int value) {
         if (key >= 0) prefs(context).edit().putInt("param_" + key, value).apply();
-        try {
-            WlzRuntimeBridge.nativeSetParam(key, value);
-        } catch (Throwable e) {
-            Log.w(TAG, "nativeSetParam unavailable for key=" + key, e);
+        if (nativeStarted) {
+            try {
+                WlzRuntimeBridge.nativeSetParam(key, value);
+            } catch (Throwable e) {
+                Log.w(TAG, "nativeSetParam unavailable for key=" + key, e);
+            }
         }
     }
 
     public static void initialize(Context context) {
+        // Safe launcher-side initialization only. The native runtime is
+        // deliberately started after Minecraft's Activity is resumed.
+        Log.d(TAG, "WLZ module manager initialized in safe Java-only mode");
+    }
+
+    public static void initializeNative(Context context) {
+        if (nativeStarted) return;
+
         try {
             WlzRuntimeBridge.nativeInitialize();
-            // Push saved state even before Minecraft is loaded. The native
-            // runtime keeps it pending and applies it as soon as signatures resolve.
+            nativeStarted = true;
+
+            // Apply the saved Java-side state only after the native runtime is
+            // attached to the running Minecraft process.
             for (int i = 0; i < MODULE_COUNT; i++) {
-                WlzRuntimeBridge.nativeSetModule(i, isModuleEnabled(context, i));
+                boolean enabled = isModuleEnabled(context, i);
+                if (enabled && isModuleSupported(context, i)) {
+                    WlzRuntimeBridge.nativeSetModule(i, true);
+                }
             }
+            Log.i(TAG, "WLZ native runtime attached after Minecraft resume");
         } catch (Throwable e) {
-            Log.w(TAG, "native runtime initialization unavailable", e);
+            nativeStarted = false;
+            Log.w(TAG, "Native runtime attachment failed; continuing without native modules", e);
         }
+    }
+
+    public static boolean isNativeStarted() {
+        return nativeStarted;
     }
 
     private static SharedPreferences prefs(Context context) {
