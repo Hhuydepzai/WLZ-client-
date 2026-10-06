@@ -1,6 +1,7 @@
 package com.wlz.client;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -48,7 +49,7 @@ public final class WlzInGameHud {
     private final Activity activity;
     private final FrameLayout decor;
     private final FrameLayout layer;
-    private final Button circle;
+    private final View circle;
     private final Button[] quickButtons = new Button[5];
 
     private TextView fpsText;
@@ -144,16 +145,9 @@ public final class WlzInGameHud {
         callbackProxy = null;
     }
 
-    private Button makeCircle() {
-        Button b = new Button(activity);
-        b.setText("WLZ");
-        b.setTextColor(TEXT);
-        b.setTextSize(11);
-        b.setAllCaps(false);
-        b.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
-        b.setBackground(circleBg());
+    private WlzLogoView makeCircle() {
+        WlzLogoView b = new WlzLogoView(activity);
         b.setContentDescription("WLZ ClickGUI");
-        b.setOnClickListener(v -> togglePanel());
         return b;
     }
 
@@ -254,9 +248,14 @@ public final class WlzInGameHud {
         head.addView(text("WLZ CLICKGUI", 16, ORANGE, true),
                 new LinearLayout.LayoutParams(0, -2, 1));
 
+        Button map = button("MAP PHÍM");
+        map.setOnClickListener(v -> activity.startActivity(
+                new Intent(activity, WlzControlEditorActivity.class)));
+        head.addView(map, lp(dp(94), dp(38)));
+
         Button close = button("ĐÓNG");
         close.setOnClickListener(v -> togglePanel());
-        head.addView(close, lp(dp(82), dp(38)));
+        head.addView(close, lp(dp(72), dp(38)));
         p.addView(head);
 
         ScrollViewWithParams scroll = new ScrollViewWithParams(activity);
