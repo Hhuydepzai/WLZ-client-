@@ -1,4 +1,4 @@
-# WLZ Client v0.9.0
+# WLZ Client v1.0.0
 
 - Android 9+ (minSdk 28)
 - arm64-v8a
@@ -31,3 +31,20 @@ Without that file the build intentionally stops instead of producing a fake "Min
 ## Build
 
 GitHub Actions builds a small WLZ helper first. When `minecraft_input/` contains the Minecraft APK or all required split parts, the workflow builds the single APK and signs the CI artifact.
+
+
+### Runtime tích hợp Minecraft
+
+CI chỉ đóng gói APK Minecraft khi `minecraft_input/` có runtime Minecraft do người dùng cung cấp. Bản build hiện tại dùng một APK Minecraft ARM64 làm nguồn, giữ `com.mojang.minecraftpe.MainActivity`, thêm WLZ Application/HUD và native runtime vào cùng APK. Không cần overlay permission và không khởi chạy ứng dụng Minecraft ngoài.
+
+File đầu vào tối thiểu cho đường build này là APK Minecraft có:
+- `AndroidManifest.xml`
+- `classes.dex`
+- `lib/arm64-v8a/libminecraftpe.so`
+- assets/resources đi kèm của chính APK
+
+Đặt APK vào `minecraft_input/`. Với XAPK/APKS dạng split, nên dùng bản **universal APK** chứa đủ runtime trước khi build, vì Android resource split không thể ghép an toàn chỉ bằng cách nối ZIP.
+
+Native WLZ 1.0.0 hiện có capability detection theo signature. Các module chỉ xuất hiện trong ClickGUI khi backend tương ứng thực sự resolve được: Zoom, Unlock FPS, Fullbright, Snaplook. FPS Counter là module HUD. Các module chưa có adapter đúng phiên bản sẽ bị ẩn thay vì hiển thị nút giả.
+
+Nguồn tham khảo native: BedrockTools (MIT) cho kỹ thuật signature/patch; Flarial chỉ được dùng làm tham chiếu kiến trúc. Không đóng gói binary Flarial.
