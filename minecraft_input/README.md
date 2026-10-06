@@ -1,12 +1,15 @@
 # Minecraft runtime input
 
-Đặt **Minecraft universal APK ARM64** vào thư mục này để CI tạo bản WLZ Client tích hợp Minecraft.
+Thư mục này nhận cả **Minecraft universal APK ARM64** lẫn bộ split đã tách thành `filemc*.zip` + `assets*.zip`.
 
-Yêu cầu:
-- có `lib/arm64-v8a/libminecraftpe.so`
-- có `AndroidManifest.xml` và `classes.dex`
-- có đầy đủ resources/assets của đúng phiên bản Minecraft
+Yêu cầu cuối cùng sau khi ghép phải có:
+- `lib/arm64-v8a/libminecraftpe.so`
+- `AndroidManifest.xml`
+- một hoặc nhiều `classes*.dex`
+- toàn bộ `res/`, `resources.arsc` và `assets/` của đúng phiên bản Minecraft
 
-Khuyến nghị dùng một APK universal thay vì XAPK/APKS split. Runtime native WLZ sẽ tự dò signature trong `libminecraftpe.so`; signature/offsets là theo phiên bản Minecraft, nên đổi phiên bản có thể làm một số module bị ẩn cho tới khi có adapter tương ứng.
+CI tự ghép các ZIP split thành một APK-shaped runtime rồi mới decode/rebuild để chèn WLZ. Không cần chạy Minecraft bằng ứng dụng ngoài và không dùng overlay permission.
 
-Không commit Minecraft APK được cấp phép cho người khác vào repository công khai.
+Runtime native WLZ dò capability trong `libminecraftpe.so`; signature/offsets phụ thuộc phiên bản Minecraft. Module nào không resolve được sẽ bị ẩn thay vì hiện nút giả.
+
+Không commit Minecraft APK/runtime proprietary vào repository công khai.
