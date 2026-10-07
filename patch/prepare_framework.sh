@@ -71,19 +71,74 @@ if [ -z "$FOUND" ]; then
   done
 fi
 
-# Last resort: Ubuntu's framework package. This is only used when no usable
-# Android SDK platform can be installed/found.
+# If sdkmanager is unavailable or failed to materialize API 36, download the
+# official Android platform archive from Google's repository metadata. This avoids
+# the obsolete Ubuntu android-framework-res package, which cannot decode modern
+# manifests correctly.
 if [ -z "$FOUND" ]; then
-  cd "$WORK"
-  sudo apt-get update -qq
-  apt-cache show android-framework-res >/dev/null 2>&1 || {
-    echo "android-framework-res package is unavailable on this runner" >&2
-    exit 1
-  }
-  apt-get download android-framework-res
-  PKG="$(ls -1t android-framework-res_*.deb | head -n 1)"
-  dpkg-deb -x "$PKG" unpacked
-  FOUND="$(find unpacked -type f -name framework-res.apk | head -n 1)"
+  echo "sdkmanager did not provide a usable Android 36 framework; downloading the official platform archive..."
+  mkdir -p "$WORK/android-36"
+  REPO_XML="$WORK/repository2-3.xml"
+  curl -fsSL --retry 4 --retry-delay 2 \
+    "https://dl.google.com/android/repository/repository2-3.xml" \
+    -o "$REPO_XML"
+  test -s "$REPO_XML"
+
+  PLATFORM_URL="$(
+    python3 - "$REPO_XML" <<'PY'
+import sys
+import urllib.parse
+import urllib.request
+import xml.etree.ElementTree as ET
+
+xml_path = sys.argv[1]
+root = ET.parse(xml_path).getroot()
+
+def local(tag):
+    return tag.rsplit("}", 1)[-1]
+
+for pkg in root.iter():
+    if local(pkg.tag) != "remotePackage" or pkg.attrib.get("path") != "platforms;android-36":
+        continue
+    archives = []
+    for archive in pkg:
+        if local(archive.tag) != "archives":
+            continue
+        for item in archive:
+            if local(item.tag) != "archive":
+                continue
+            complete = None
+            host_os = ""
+            for child in item:
+                if local(child.tag) != "host-os":
+                    continue
+                host_os = (child.text or "").strip().lower()
+            for child in item:
+                if local(child.tag) != "complete":
+                    continue
+                for leaf in child:
+                    if local(leaf.tag) == "url" and leaf.text:
+                        complete = leaf.text.strip()
+            if complete and (not host_os or host_os == "linux"):
+                archives.append(complete)
+    if archives:
+        base = "https://dl.google.com/android/repository/"
+        print(urllib.parse.urljoin(base, archives[0]))
+        raise SystemExit(0)
+
+raise SystemExit("platforms;android-36 was not found in Google's repository metadata")
+PY
+  )"
+  test -n "$PLATFORM_URL"
+  echo "Platform archive: $PLATFORM_URL"
+
+  PLATFORM_ZIP="$WORK/android-platform-36.zip"
+  curl -fL --retry 4 --retry-delay 2 "$PLATFORM_URL" -o "$PLATFORM_ZIP"
+  test -s "$PLATFORM_ZIP"
+  unzip -tq "$PLATFORM_ZIP"
+
+  unzip -q "$PLATFORM_ZIP" -d "$WORK/android-36"
+  FOUND="$(find "$WORK/android-36" -type f -path "*/android-36/data/res/framework-res.apk" | head -n 1 || true)"
 fi
 
 test -n "$FOUND"
