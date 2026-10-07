@@ -31,6 +31,8 @@ public final class WlzKeyMapper {
     public static void setKey(Context context, int action, int keyCode) {
         if (action < 0 || action >= ACTIONS.length) return;
         prefs(context).edit().putInt("key_" + action, keyCode).apply();
+        context.getSharedPreferences("wlz_settings", Context.MODE_PRIVATE)
+                .edit().putBoolean("hotkeys_enabled", true).apply();
     }
 
     public static String keyName(int keyCode) {
