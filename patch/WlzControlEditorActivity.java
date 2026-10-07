@@ -64,7 +64,7 @@ public final class WlzControlEditorActivity extends Activity {
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
         for (int i = 0; i < WlzKeyMapper.ACTIONS.length; i++) {
-            if (WlzModuleManager.isModuleSupported(this, i)) list.addView(keyRow(i));
+            list.addView(keyRow(i));
         }
         scroll.addView(list);
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
