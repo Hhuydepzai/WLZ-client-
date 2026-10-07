@@ -18,6 +18,9 @@ for base in "${SDK}" "/opt/android-sdk" "/usr/local/lib/android/sdk" "/usr/lib/a
       SDK="$base"
     fi
 
+    # Runner images often ship a versioned cmdline-tools directory instead of
+    # the `latest` alias. Find any real sdkmanager binary rather than falling
+    # back to the obsolete Ubuntu framework-res package.
     for sm in \
       "$base/cmdline-tools/latest/bin/sdkmanager" \
       "$base/cmdline-tools/bin/sdkmanager" \
@@ -27,6 +30,11 @@ for base in "${SDK}" "/opt/android-sdk" "/usr/local/lib/android/sdk" "/usr/lib/a
         break 2
       fi
     done
+
+    if [ -z "$SDKMANAGER" ] && [ -d "$base/cmdline-tools" ]; then
+      SDKMANAGER="$(find "$base/cmdline-tools" -maxdepth 3 -type f -name sdkmanager -perm -u+x 2>/dev/null | sort -V | tail -n 1 || true)"
+      [ -n "$SDKMANAGER" ] && break
+    fi
   fi
 done
 
