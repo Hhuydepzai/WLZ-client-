@@ -83,24 +83,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
-
+          curl -fL https://github.com/iBotPeaches/Apktool/releases/download/v3.0.3/apktool_3.0.3.jar -o apktool.jar
           mkdir -p apktool-framework
-          cd apktool-framework
+          mkdir -p framework-unpacked
+          cd framework-unpacked
           apt-get download android-framework-res
-          deb="$(ls android-framework-res_*.deb | head -n 1)"
-          dpkg-deb -x "${deb}" unpacked
-          java -jar "${GITHUB_WORKSPACE}/apktool.jar" empty-framework-dir -p . -f
-          java -jar "${GITHUB_WORKSPACE}/apktool.jar" if -p . unpacked/usr/share/android-framework-res/framework-res.apk
+          cd ..
+          dpkg-deb -x framework-unpacked/android-framework-res_*.deb framework-unpacked/unpacked
+          java -jar apktool.jar empty-framework-dir -p apktool-framework -f
+          java -jar apktool.jar if -p apktool-framework framework-unpacked/unpacked/usr/share/android-framework-res/framework-res.apk
       - name: Prepare embedded Minecraft build
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist
 
-          APKTOOL_URL="$(curl -fsSL https://api.github.com/repos/iBotPeaches/Apktool/releases/latest | jq -r '.assets[] | select(.name | endswith(".jar")) | .browser_download_url' | head -n 1)"
-          test -n "${APKTOOL_URL}"
-          curl -fL "${APKTOOL_URL}" -o apktool.jar
 
           python3 patch/embed_minecraft.py             --input minecraft_input             --wlz-apk app/build/outputs/apk/debug/app-debug.apk             --apktool apktool.jar             --frame-path apktool-framework             --out dist/WLZ-Minecraft-unsigned.apk
 
