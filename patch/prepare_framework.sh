@@ -138,11 +138,14 @@ PY
   unzip -tq "$PLATFORM_ZIP"
 
   unzip -q "$PLATFORM_ZIP" -d "$WORK/android-36"
-  FOUND="$(find "$WORK/android-36" -type f -path "*/android-36/data/res/framework-res.apk" | head -n 1 || true)"
+  FOUND="$(find "$WORK/android-36" -type f -name framework-res.apk | head -n 1 || true)"
 fi
 
-test -n "$FOUND"
-test -s "$FOUND"
+if [ -z "$FOUND" ] || [ ! -s "$FOUND" ]; then
+  echo "ERROR: official Android 36 archive did not contain a usable framework-res.apk" >&2
+  find "$WORK/android-36" -type f | head -n 80 >&2 || true
+  exit 1
+fi
 echo "Using Android framework: $FOUND"
 
 rm -rf "$OUT"/*
