@@ -14,18 +14,9 @@ public final class WlzModuleManager {
 
     public static boolean isModuleSupported(Context context, int index) {
         if (index == 8) return true;
-        if (index < 0 || index >= MODULE_COUNT) return false;
-
-        // Do not load the native runtime from the launcher process. Minecraft's
-        // native library must be fully started first, otherwise signature
-        // scanning/hooking can crash the process during startup.
-        if (!nativeStarted) return false;
-
-        try {
-            return WlzRuntimeBridge.nativeIsModuleSupported(index);
-        } catch (Throwable e) {
-            return false;
-        }
+        if (index < 0 || index >= MODULE_COUNT || !nativeStarted) return false;
+        try { return WlzRuntimeBridge.nativeIsModuleSupported(index); }
+        catch (Throwable e) { return false; }
     }
 
     public static boolean isModuleEnabled(Context context, int index) {
@@ -35,18 +26,19 @@ public final class WlzModuleManager {
 
     public static void setModuleEnabled(Context context, int index, boolean enabled) {
         if (index < 0 || index >= MODULE_COUNT) return;
-        if (!isModuleSupported(context, index)) {
+
+        if (index != 8 && !nativeStarted) initializeNative(context);
+
+        if (index != 8 && !isModuleSupported(context, index)) {
             Log.w(TAG, "Ignoring unsupported module index=" + index);
             return;
         }
 
         prefs(context).edit().putBoolean("m_" + index, enabled).apply();
+
         if (nativeStarted) {
-            try {
-                WlzRuntimeBridge.nativeSetModule(index, enabled);
-            } catch (Throwable e) {
-                Log.w(TAG, "nativeSetModule unavailable for index=" + index, e);
-            }
+            try { WlzRuntimeBridge.nativeSetModule(index, enabled); }
+            catch (Throwable e) { Log.w(TAG, "nativeSetModule failed for index=" + index, e); }
         }
     }
 
@@ -57,40 +49,31 @@ public final class WlzModuleManager {
     public static void setParam(Context context, int key, int value) {
         if (key >= 0) prefs(context).edit().putInt("param_" + key, value).apply();
         if (nativeStarted) {
-            try {
-                WlzRuntimeBridge.nativeSetParam(key, value);
-            } catch (Throwable e) {
-                Log.w(TAG, "nativeSetParam unavailable for key=" + key, e);
-            }
+            try { WlzRuntimeBridge.nativeSetParam(key, value); }
+            catch (Throwable e) { Log.w(TAG, "nativeSetParam failed for key=" + key, e); }
         }
     }
 
     public static void initialize(Context context) {
-        // Safe launcher-side initialization only. The native runtime is
-        // deliberately started after Minecraft's Activity is resumed.
-        Log.d(TAG, "WLZ module manager initialized in safe Java-only mode");
+        Log.d(TAG, "WLZ Java layer initialized; native runtime deferred");
     }
 
     public static void initializeNative(Context context) {
         if (nativeStarted) return;
-
+        if (!WlzRuntimeBridge.ensureLoaded()) {
+            Log.w(TAG, "Native library failed to load; continuing without native modules");
+            return;
+        }
         try {
-            WlzRuntimeBridge.nativeInitialize();
-            nativeStarted = true;
-
-            // Do not re-apply persisted native toggles automatically. Native
-            // hooks are only installed after an explicit user action, which keeps
-            // the Minecraft startup path free of invasive patches.
-            Log.i(TAG, "WLZ native runtime attached after Minecraft resume");
+            if (WlzRuntimeBridge.nativeInitialize()) nativeStarted = true;
+            else Log.w(TAG, "nativeInitialize returned false");
         } catch (Throwable e) {
             nativeStarted = false;
-            Log.w(TAG, "Native runtime attachment failed; continuing without native modules", e);
+            Log.w(TAG, "WLZ native runtime start failed", e);
         }
     }
 
-    public static boolean isNativeStarted() {
-        return nativeStarted;
-    }
+    public static boolean isNativeStarted() { return nativeStarted; }
 
     private static SharedPreferences prefs(Context context) {
         return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
