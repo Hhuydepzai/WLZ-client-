@@ -104,10 +104,6 @@ public final class WlzInGameHud {
 
         int visible = 0;
         for (int i = 0; i < labels.length; i++) {
-            if (actions[i] >= 0 && !WlzModuleManager.isModuleSupported(activity, actions[i])) {
-                continue;
-            }
-
             final int slot = i;
             final int action = actions[i];
             Button b = button(labels[i]);
@@ -170,6 +166,16 @@ public final class WlzInGameHud {
                 return true;
             }
         });
+    }
+
+    public static void refreshAllHotkeys() {
+        for (WlzInGameHud hud : ACTIVE.values()) {
+            if (hud.prefs().getBoolean("hotkeys_enabled", false)) {
+                hud.installKeyHook();
+            } else {
+                hud.restoreKeyHook();
+            }
+        }
     }
 
     private void installKeyHook() {
@@ -266,8 +272,6 @@ public final class WlzInGameHud {
 
         for (int i = 0; i < NAMES.length; i++) {
             final int idx = i;
-            if (!WlzModuleManager.isModuleSupported(activity, idx)) continue;
-
             LinearLayout row = new LinearLayout(activity);
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(7), dp(3), dp(4), dp(3));
