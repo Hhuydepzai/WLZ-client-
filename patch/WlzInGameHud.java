@@ -78,7 +78,7 @@ public final class WlzInGameHud {
         makeDraggable(circle, cp, "hud_x", "hud_y", true);
         addQuickButtons();
 
-        installKeyHook();
+        if (prefs().getBoolean("hotkeys_enabled", false)) installKeyHook();
         applyVisuals();
     }
 
