@@ -25,10 +25,11 @@ public final class WlzApplication extends com.pairip.application.Application {
             if (isMinecraft(activity)) {
                 // Attach the native WLZ runtime only after Minecraft has had
                 // time to initialize its own native engine.
-                WlzInGameHud.attach(activity);
                 activity.getWindow().getDecorView().postDelayed(new Runnable() {
                     @Override public void run() {
-                        WlzModuleManager.initializeNative(activity);
+                        if (!activity.isFinishing() && !activity.isDestroyed()) {
+                            try { WlzInGameHud.attach(activity); } catch (Throwable ignored) {}
+                        }
                     }
                 }, NATIVE_ATTACH_DELAY_MS);
             }
