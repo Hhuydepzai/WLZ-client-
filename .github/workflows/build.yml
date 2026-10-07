@@ -82,16 +82,8 @@ jobs:
       - name: Prepare Android framework for Apktool
         shell: bash
         run: |
-          set -euo pipefail
-          curl -fL https://github.com/iBotPeaches/Apktool/releases/download/v3.0.3/apktool_3.0.3.jar -o apktool.jar
-          mkdir -p apktool-framework
-          mkdir -p framework-unpacked
-          cd framework-unpacked
-          apt-get download android-framework-res
-          cd ..
-          dpkg-deb -x framework-unpacked/android-framework-res_*.deb framework-unpacked/unpacked
-          java -jar apktool.jar empty-framework-dir -p apktool-framework -f
-          java -jar apktool.jar if -p apktool-framework framework-unpacked/unpacked/usr/share/android-framework-res/framework-res.apk
+          bash patch/prepare_framework.sh apktool-framework framework-unpacked
+
       - name: Prepare embedded Minecraft build
         shell: bash
         run: |
