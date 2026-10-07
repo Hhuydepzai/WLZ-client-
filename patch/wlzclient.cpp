@@ -40,7 +40,6 @@ struct Patch { void* addr=nullptr; std::vector<uint8_t> original; bool active=fa
 Patch g_fullbright;
 void* g_zoomTrampoline = nullptr;
 void* g_turnTrampoline = nullptr;
-void* g_lastPlayer = nullptr;
 
 using ZoomFn = float (*)(void*);
 using FreeLookBoolFn = uint64_t (*)(
@@ -385,13 +384,6 @@ void applyFullbright() {
     }
 }
 
-void doSnapNow() {
-    if (g_modules[7].load() && g_lastPlayer) {
-        snapPlayer(g_lastPlayer);
-        g_snapPending.store(false);
-    }
-}
-
 void refreshCapabilities() {
     // Startup must be non-invasive. Only validate the exact runtime targets;
     // hooks are installed later, on explicit user action.
@@ -526,10 +518,6 @@ Java_com_wlz_client_WlzRuntimeBridge_nativeSetModule(JNIEnv*,jclass,jint index,j
 
     g_modules[index].store(on);
 
-    if (index==7 && on) {
-        g_snapPending.store(true);
-        doSnapNow();
-    }
     if (index==4) applyFullbright();
 }
 
