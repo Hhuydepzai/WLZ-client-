@@ -90,6 +90,8 @@ jobs:
           set -euo pipefail
           mkdir -p dist
 
+          curl -fL https://github.com/iBotPeaches/Apktool/releases/download/v3.0.3/apktool_3.0.3.jar -o apktool.jar
+          test -s apktool.jar
 
           python3 patch/embed_minecraft.py             --input minecraft_input             --wlz-apk app/build/outputs/apk/debug/app-debug.apk             --apktool apktool.jar             --frame-path apktool-framework             --out dist/WLZ-Minecraft-unsigned.apk
 
