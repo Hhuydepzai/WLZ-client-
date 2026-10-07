@@ -42,25 +42,19 @@ void* g_zoomTrampoline = nullptr;
 void* g_turnTrampoline = nullptr;
 
 using ZoomFn = float (*)(void*);
-using FreeLookBoolFn = uint64_t (*)(
-    uintptr_t, uintptr_t, uintptr_t, uintptr_t,
-    uintptr_t, uintptr_t, uintptr_t, uintptr_t
-);
 using SwapFn = EGLBoolean (*)(EGLDisplay, EGLSurface);
 
 ZoomFn g_zoomOrig = nullptr;
-FreeLookBoolFn g_freeLookAllowOrig = nullptr;
-FreeLookBoolFn g_freeLookBlockOrig = nullptr;
 SwapFn g_swapOrig = nullptr;
 void** g_swapGot = nullptr;
 
-bool g_zoomHooked=false, g_freeLookAllowHooked=false, g_freeLookBlockHooked=false;
+bool g_zoomHooked=false, g_freeLookVectorHooked=false;
 bool g_swapHooked=false, g_fullbrightResolved=false;
 std::atomic<bool> g_capsReady{false};
 
 constexpr uintptr_t MC_ZOOM_OFFSET = 0xAAC9CE4ULL;
-constexpr uintptr_t MC_FREELOOK_ALLOW_OFFSET = 0x9817248ULL;
-constexpr uintptr_t MC_FREELOOK_BLOCK_OFFSET = 0x86E29A0ULL;
+// Exact Apollon FreeLook target in the same libminecraftpe.so build.
+constexpr uintptr_t MC_FREELOOK_VECTOR_OFFSET = 0xF578E60ULL;
 
 struct Vec2 { float x; float y; };
 
@@ -199,24 +193,40 @@ float zoomHook(void* self) {
     return g_zoomOrig ? g_zoomOrig(self) : 0.1f;
 }
 
-uint64_t freeLookAllowHook(
-    uintptr_t a0, uintptr_t a1, uintptr_t a2, uintptr_t a3,
-    uintptr_t a4, uintptr_t a5, uintptr_t a6, uintptr_t a7) {
-    // Apollon's FreeLook path forces this predicate true while FreeLook is on.
-    if (g_modules[1].load()) return 1;
-    return g_freeLookAllowOrig
-        ? g_freeLookAllowOrig(a0,a1,a2,a3,a4,a5,a6,a7)
-        : 0;
-}
+struct Vec3 {
+    float x;
+    float y;
+    float z;
+};
 
-uint64_t freeLookBlockHook(
-    uintptr_t a0, uintptr_t a1, uintptr_t a2, uintptr_t a3,
-    uintptr_t a4, uintptr_t a5, uintptr_t a6, uintptr_t a7) {
-    // A second Apollon FreeLook hook suppresses the normal camera/player path.
-    if (g_modules[1].load()) return 0;
-    return g_freeLookBlockOrig
-        ? g_freeLookBlockOrig(a0,a1,a2,a3,a4,a5,a6,a7)
-        : 0;
+void freeLookVectorHook(void* self, void* vecPtr) {
+    if (!self || !vecPtr) return;
+
+    // This reproduces Apollon's exact target behavior:
+    // state = *(self + 0x208), then copy vec.{x,y,z} into
+    // state.{x,y,z}. In FreeLook mode 2, x/z are replaced with the
+    // current state values so camera movement no longer rotates the player.
+    uintptr_t state = 0;
+    std::memcpy(&state, reinterpret_cast<uint8_t*>(self) + 0x208, sizeof(state));
+    if (state < 0x1000ULL) return;
+
+    Vec3 incoming{};
+    std::memcpy(&incoming, vecPtr, sizeof(incoming));
+
+    if (g_modules[1].load()) {
+        float keepX = 0.0f;
+        float keepZ = 0.0f;
+        std::memcpy(&keepX, reinterpret_cast<uint8_t*>(state) + 0x18, sizeof(keepX));
+        std::memcpy(&keepZ, reinterpret_cast<uint8_t*>(state) + 0x20, sizeof(keepZ));
+
+        // Apollon mode == 2.
+        incoming.x = keepX;
+        incoming.z = keepZ;
+    }
+
+    std::memcpy(reinterpret_cast<uint8_t*>(state) + 0x18, &incoming.x, sizeof(float));
+    std::memcpy(reinterpret_cast<uint8_t*>(state) + 0x1c, &incoming.y, sizeof(float));
+    std::memcpy(reinterpret_cast<uint8_t*>(state) + 0x20, &incoming.z, sizeof(float));
 }
 
 uintptr_t moduleAddress(uintptr_t offset) {
@@ -272,40 +282,24 @@ void installZoomHook() {
     }
 }
 
-void installFreeLookHooks() {
-    if (!g_freeLookAllowHooked) {
-        static const uint8_t ALLOW_PROLOG[INLINE_HEAD] = {
-            0xFF,0xC3,0x01,0xD1, 0xFD,0x7B,0x04,0xA9,
-            0xF5,0x2B,0x00,0xF9, 0xF4,0x4F,0x06,0xA9
-        };
-        void* tramp=nullptr;
-        if (installFixedHook(
-                MC_FREELOOK_ALLOW_OFFSET, ALLOW_PROLOG,
-                reinterpret_cast<void*>(&freeLookAllowHook),
-                &tramp)) {
-            g_freeLookAllowOrig=reinterpret_cast<FreeLookBoolFn>(tramp);
-            g_freeLookAllowHooked=true;
-        }
-    }
+void installFreeLookHook() {
+    if (g_freeLookVectorHooked) return;
 
-    if (!g_freeLookBlockHooked) {
-        static const uint8_t BLOCK_PROLOG[INLINE_HEAD] = {
-            0xFF,0xC3,0x03,0xD1, 0xFD,0x7B,0x0B,0xA9,
-            0xF7,0x63,0x00,0xF9, 0xF6,0x57,0x0D,0xA9
-        };
-        void* tramp=nullptr;
-        if (installFixedHook(
-                MC_FREELOOK_BLOCK_OFFSET, BLOCK_PROLOG,
-                reinterpret_cast<void*>(&freeLookBlockHook),
-                &tramp)) {
-            g_freeLookBlockOrig=reinterpret_cast<FreeLookBoolFn>(tramp);
-            g_freeLookBlockHooked=true;
-        }
-    }
+    static const uint8_t PROLOG[INLINE_HEAD] = {
+        0x08,0x04,0x41,0xF9, 0x29,0x08,0x40,0xB9,
+        0x2A,0x00,0x40,0xF9, 0x09,0x20,0x00,0xB9
+    };
 
-    logi("Apollon FreeLook hooks: allow=%d block=%d",
-         g_freeLookAllowHooked ? 1 : 0,
-         g_freeLookBlockHooked ? 1 : 0);
+    const uintptr_t addr = moduleAddress(MC_FREELOOK_VECTOR_OFFSET);
+    if (!addr || !fixedPrologMatches(MC_FREELOOK_VECTOR_OFFSET, PROLOG)) return;
+
+    uint8_t jump[INLINE_HEAD]{};
+    absJump16(jump, reinterpret_cast<uintptr_t>(&freeLookVectorHook));
+    if (writeCode(reinterpret_cast<void*>(addr), jump, sizeof(jump))) {
+        g_freeLookVectorHooked = true;
+        logi("Apollon FreeLook vector hook installed @ +0x%llX",
+             static_cast<unsigned long long>(MC_FREELOOK_VECTOR_OFFSET));
+    }
 }
 
 bool resolveFullbright() {
@@ -397,14 +391,12 @@ void refreshCapabilities() {
         0xFF,0xC3,0x01,0xD1, 0xFD,0x7B,0x04,0xA9,
         0xF5,0x2B,0x00,0xF9, 0xF4,0x4F,0x06,0xA9
     };
-    static const uint8_t BLOCK_PROLOG[INLINE_HEAD] = {
-        0xFF,0xC3,0x03,0xD1, 0xFD,0x7B,0x0B,0xA9,
-        0xF7,0x63,0x00,0xF9, 0xF6,0x57,0x0D,0xA9
-    };
-
     if (fixedPrologMatches(MC_ZOOM_OFFSET, ZOOM_PROLOG)) caps|=(1u<<0);
-    if (fixedPrologMatches(MC_FREELOOK_ALLOW_OFFSET, ALLOW_PROLOG)
-            && fixedPrologMatches(MC_FREELOOK_BLOCK_OFFSET, BLOCK_PROLOG)) {
+    static const uint8_t FREELOOK_PROLOG[INLINE_HEAD] = {
+        0x08,0x04,0x41,0xF9, 0x29,0x08,0x40,0xB9,
+        0x2A,0x00,0x40,0xF9, 0x09,0x20,0x00,0xB9
+    };
+    if (fixedPrologMatches(MC_FREELOOK_VECTOR_OFFSET, FREELOOK_PROLOG)) {
         caps|=(1u<<1); // FreeLook.
     }
     if (resolveFullbright()) caps|=(1u<<4);
@@ -501,9 +493,9 @@ Java_com_wlz_client_WlzRuntimeBridge_nativeSetModule(JNIEnv*,jclass,jint index,j
             return;
         }
     }
-    if (on && index==1 && (!g_freeLookAllowHooked || !g_freeLookBlockHooked)) {
-        installFreeLookHooks();
-        if (!g_freeLookAllowHooked || !g_freeLookBlockHooked) {
+    if (on && index==1 && !g_freeLookVectorHooked) {
+        installFreeLookHook();
+        if (!g_freeLookVectorHooked) {
             g_modules[index].store(false);
             return;
         }
