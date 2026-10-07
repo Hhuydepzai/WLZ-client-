@@ -134,6 +134,11 @@ jobs:
           "${APKSIGNER}" sign             --ks dist/wlz-ci.jks             --ks-pass pass:wlzclient             --key-pass pass:wlzclient             --out dist/WLZ-Minecraft.apk             dist/WLZ-Minecraft-aligned.apk
 
           "${APKSIGNER}" verify --verbose dist/WLZ-Minecraft.apk
+
+          # Verify the final package is WLZ, not com.mojang.minecraftpe.
+          AAPT2="${ANDROID_HOME}/build-tools/${BT}/aapt2"
+          BADGING="$("${AAPT2}" dump badging dist/WLZ-Minecraft.apk)"
+          printf '%s\n' "$BADGING" | grep -q "package: name='com.wlz.client'"
           test -s dist/WLZ-Minecraft.apk
 
       - name: Show artifacts
