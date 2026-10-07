@@ -83,6 +83,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+
           mkdir -p apktool-framework
           cd apktool-framework
           apt-get download android-framework-res
@@ -90,7 +92,6 @@ jobs:
           dpkg-deb -x "${deb}" unpacked
           java -jar ../apktool.jar empty-framework-dir -p . -f
           java -jar ../apktool.jar if -p . unpacked/usr/share/android-framework-res/framework-res.apk
-
       - name: Prepare embedded Minecraft build
         shell: bash
         run: |
