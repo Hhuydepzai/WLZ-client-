@@ -424,7 +424,6 @@ void runtimeThread() {
     if (!g_mcReady.load()) return;
     refreshCapabilities();
     applyFullbright();
-    doSnapNow();
 }
 
 void initializeState() {
