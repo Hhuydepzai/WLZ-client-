@@ -141,7 +141,7 @@ jobs:
           ZIPALIGN="${ANDROID_HOME}/build-tools/${BT}/zipalign"
           APKSIGNER="${ANDROID_HOME}/build-tools/${BT}/apksigner"
 
-          "${ZIPALIGN}" -P 16 -f -p 4             dist/WLZ-Minecraft-unsigned.apk             dist/WLZ-Minecraft-aligned.apk
+          "${ZIPALIGN}" -P 16 -f             dist/WLZ-Minecraft-unsigned.apk             dist/WLZ-Minecraft-aligned.apk
 
           keytool -genkeypair -v             -keystore dist/wlz-ci.jks             -storepass wlzclient             -keypass wlzclient             -alias wlz             -keyalg RSA -keysize 2048 -validity 10000             -dname "CN=WLZ Client,O=WLZ"
 
