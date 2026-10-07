@@ -33,6 +33,7 @@ public final class WlzKeyMapper {
         prefs(context).edit().putInt("key_" + action, keyCode).apply();
         context.getSharedPreferences("wlz_settings", Context.MODE_PRIVATE)
                 .edit().putBoolean("hotkeys_enabled", true).apply();
+        try { WlzInGameHud.refreshAllHotkeys(); } catch (Throwable ignored) {}
     }
 
     public static String keyName(int keyCode) {
