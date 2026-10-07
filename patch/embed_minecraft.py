@@ -173,9 +173,10 @@ def write_zip(entries, out):
 
 
 def run_manifest_editor(manifest_editor, source_apk, out_apk):
-    # Keep Minecraft's original MainActivity/launcher intact. We only replace
-    # the Application class with WLZ's safe PairIP subclass and register the
-    # key-mapping Activity used by the in-game ClickGUI.
+    # Keep Minecraft's original MainActivity/launcher intact.
+    # Give the packaged app its own Android package so it can coexist with
+    # the normal Minecraft install. Native libs stay inside the APK instead
+    # of being extracted to a second copy on disk.
     run(
         [
             "java",
@@ -184,8 +185,12 @@ def run_manifest_editor(manifest_editor, source_apk, out_apk):
             str(source_apk),
             "-o",
             str(out_apk),
+            "-pkg",
+            "com.wlz.client",
             "-an",
             "com.wlz.client.WlzApplication",
+            "-aa",
+            "android-extractNativeLibs:false",
             "-act",
             "com.wlz.client.WlzControlEditorActivity:false",
         ]
