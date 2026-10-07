@@ -195,6 +195,7 @@ def main():
     ap.add_argument("--input", required=True)
     ap.add_argument("--wlz-apk", required=True)
     ap.add_argument("--apktool", required=True)
+    ap.add_argument("--frame-path", required=False, default=None)
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
     payload = Path(tempfile.mkdtemp(prefix="wlz-payload-"))
@@ -207,7 +208,11 @@ def main():
         source = source_apk(payload)
         if source.name == "__reconstructed_minecraft.apk":
             rebuild(payload, source)
-        run(["java", "-jar", a.apktool, "d", "-f", str(source), "-o", str(decoded)])
+        decode_cmd = ["java", "-jar", a.apktool, "d", "-f"]
+        if a.frame_path:
+            decode_cmd += ["-p", a.frame_path]
+        decode_cmd += [str(source), "-o", str(decoded)]
+        run(decode_cmd)
         manifest = decoded / "AndroidManifest.xml"
         if not manifest.exists():
             raise SystemExit("Apktool did not produce AndroidManifest.xml")
@@ -215,7 +220,11 @@ def main():
         icon = decoded / "res" / "drawable" / "wlz_icon.xml"
         icon.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2("patch/wlz_icon.xml", icon)
-        run(["java", "-jar", a.apktool, "b", str(decoded), "-o", str(rebuilt)])
+        build_cmd = ["java", "-jar", a.apktool, "b"]
+        if a.frame_path:
+            build_cmd += ["-p", a.frame_path]
+        build_cmd += [str(decoded), "-o", str(rebuilt)]
+        run(build_cmd)
         out = Path(a.out).resolve()
         tmp = out.with_suffix(".tmp.apk")
         inject(Path(a.wlz_apk).resolve(), rebuilt, tmp)
