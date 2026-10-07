@@ -8,20 +8,27 @@ mkdir -p "$OUT" "$WORK"
 
 SDK="${ANDROID_HOME:-}"
 FOUND=""
-if [ -n "$SDK" ] && [ -d "$SDK/platforms" ]; then
-  FOUND="$(find "$SDK/platforms" -type f -path "*/data/res/framework-res.apk" | sort | tail -n 1)"
-fi
 
-if [ -z "$FOUND" ] && [ -n "$SDK" ] && command -v sdkmanager >/dev/null 2>&1; then
-  yes | sdkmanager --sdk_root="$SDK" "platforms;android-36" >/dev/null
-  FOUND="$(find "$SDK/platforms/android-36" -type f -path "*/data/res/framework-res.apk" | head -n 1)"
-fi
+# GitHub's Android runner normally has framework-res.apk under the SDK.
+for base in "${SDK}" "/opt/android-sdk" "/usr/local/lib/android/sdk" "/usr/lib/android-sdk"; do
+  if [ -n "$base" ] && [ -d "$base" ]; then
+    FOUND="$(find "$base/platforms" "$base/system-images" -type f -path "*/data/res/framework-res.apk" 2>/dev/null | sort -V | tail -n 1 || true)"
+    [ -n "$FOUND" ] && break
+  fi
+done
 
+# Fall back to Ubuntu's framework resource package. Hosted GitHub runners permit
+# sudo; the previous implementation tried apt without privileges and died here.
 if [ -z "$FOUND" ]; then
   cd "$WORK"
-  apt-get update -qq
+  sudo apt-get update -qq
+  apt-cache show android-framework-res >/dev/null 2>&1 || {
+    echo "android-framework-res package is unavailable on this runner" >&2
+    exit 1
+  }
   apt-get download android-framework-res
-  dpkg-deb -x android-framework-res_*.deb unpacked
+  PKG="$(ls -1t android-framework-res_*.deb | head -n 1)"
+  dpkg-deb -x "$PKG" unpacked
   FOUND="$(find unpacked -type f -name framework-res.apk | head -n 1)"
 fi
 
@@ -29,11 +36,7 @@ test -n "$FOUND"
 test -s "$FOUND"
 echo "Using Android framework: $FOUND"
 
-# Do not manually copy framework-res.apk. Apktool assigns framework package IDs
-# and stores the framework in the format it expects.
 rm -rf "$OUT"/*
 java -jar "$APKTOOL" if "$FOUND" -p "$OUT"
 test -s "$OUT/1.apk"
-
-echo "Installed Apktool frameworks:"
 java -jar "$APKTOOL" lf -p "$OUT"
