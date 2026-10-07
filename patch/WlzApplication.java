@@ -109,9 +109,15 @@ public final class WlzApplication extends com.pairip.application.Application {
         return Math.round(v * a.getResources().getDisplayMetrics().density);
     }
 
-    private static FrameLayout.LayoutParams lp(Activity a, int w, int h) {
-        FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(w, h);
+    private static LinearLayout.LayoutParams lp(Activity a, int w, int h) {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(w, h);
         p.gravity = Gravity.CENTER;
+        return p;
+    }
+
+    private static LinearLayout.LayoutParams lp(Activity a, int w, int h, int topMargin) {
+        LinearLayout.LayoutParams p = lp(a, w, h);
+        p.topMargin = topMargin;
         return p;
     }
 
