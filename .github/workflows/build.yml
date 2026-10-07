@@ -90,8 +90,8 @@ jobs:
           apt-get download android-framework-res
           deb="$(ls android-framework-res_*.deb | head -n 1)"
           dpkg-deb -x "${deb}" unpacked
-          java -jar ../apktool.jar empty-framework-dir -p . -f
-          java -jar ../apktool.jar if -p . unpacked/usr/share/android-framework-res/framework-res.apk
+          java -jar "${GITHUB_WORKSPACE}/apktool.jar" empty-framework-dir -p . -f
+          java -jar "${GITHUB_WORKSPACE}/apktool.jar" if -p . unpacked/usr/share/android-framework-res/framework-res.apk
       - name: Prepare embedded Minecraft build
         shell: bash
         run: |
