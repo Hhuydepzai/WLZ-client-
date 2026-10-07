@@ -1,11 +1,23 @@
 package com.wlz.client;
 
 public final class WlzRuntimeBridge {
-    static {
-        System.loadLibrary("wlzruntime");
-    }
+    private static volatile boolean loaded;
 
     private WlzRuntimeBridge() {}
+
+    public static synchronized boolean ensureLoaded() {
+        if (loaded) return true;
+        try {
+            System.loadLibrary("wlzruntime");
+            loaded = true;
+            return true;
+        } catch (Throwable ignored) {
+            loaded = false;
+            return false;
+        }
+    }
+
+    public static boolean isLoaded() { return loaded; }
 
     public static native boolean nativeInitialize();
     public static native boolean nativeIsLoaded();
