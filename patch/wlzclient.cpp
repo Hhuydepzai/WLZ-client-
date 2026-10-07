@@ -42,17 +42,26 @@ void* g_zoomTrampoline = nullptr;
 void* g_turnTrampoline = nullptr;
 void* g_lastPlayer = nullptr;
 
-using GetFovFn = float (*)(void*, float, int);
-using TurnDeltaFn = void (*)(void*, void*);
+using ZoomFn = float (*)(void*);
+using FreeLookBoolFn = uint64_t (*)(
+    uintptr_t, uintptr_t, uintptr_t, uintptr_t,
+    uintptr_t, uintptr_t, uintptr_t, uintptr_t
+);
 using SwapFn = EGLBoolean (*)(EGLDisplay, EGLSurface);
 
-GetFovFn g_getFovOrig = nullptr;
-TurnDeltaFn g_turnOrig = nullptr;
+ZoomFn g_zoomOrig = nullptr;
+FreeLookBoolFn g_freeLookAllowOrig = nullptr;
+FreeLookBoolFn g_freeLookBlockOrig = nullptr;
 SwapFn g_swapOrig = nullptr;
 void** g_swapGot = nullptr;
 
-bool g_zoomHooked=false, g_turnHooked=false, g_swapHooked=false, g_fullbrightResolved=false;
-std::atomic<bool> g_snapPending{false};
+bool g_zoomHooked=false, g_freeLookAllowHooked=false, g_freeLookBlockHooked=false;
+bool g_swapHooked=false, g_fullbrightResolved=false;
+std::atomic<bool> g_capsReady{false};
+
+constexpr uintptr_t MC_ZOOM_OFFSET = 0xAAC9CE4ULL;
+constexpr uintptr_t MC_FREELOOK_ALLOW_OFFSET = 0x9817248ULL;
+constexpr uintptr_t MC_FREELOOK_BLOCK_OFFSET = 0x86E29A0ULL;
 
 struct Vec2 { float x; float y; };
 
@@ -184,38 +193,59 @@ void* installInlineHook(void* target,void* detour,void** originalOut) {
     return tramp;
 }
 
-float getFovHook(void* self,float base,int variableFov) {
-    float out=g_getFovOrig ? g_getFovOrig(self,base,variableFov) : base;
-    if (!g_modules[0].load()) return out;
-    if (!std::isfinite(out) || out<1.0f || out>180.0f) out=base;
-    return std::clamp(out*0.50f,20.0f,70.0f);
+float zoomHook(void* self) {
+    // Apollon's Zoom callback replaces the camera/FOV result with 0.1f
+    // while Zoom is enabled. Reimplemented here without copying its binary.
+    if (g_modules[0].load()) return 0.1f;
+    return g_zoomOrig ? g_zoomOrig(self) : 0.1f;
 }
 
-void snapPlayer(void* player) {
-    if (!player) return;
-    uintptr_t actor=reinterpret_cast<uintptr_t>(player);
-    uintptr_t rotComp=0;
-    std::memcpy(&rotComp,reinterpret_cast<void*>(actor+0x218),sizeof(rotComp));
-    if (rotComp<0x1000) return;
-    auto* rot=reinterpret_cast<Vec2*>(rotComp);
-    rot->y += 180.0f;
-    while (rot->y>180.0f) rot->y-=360.0f;
-    while (rot->y<-180.0f) rot->y+=360.0f;
+uint64_t freeLookAllowHook(
+    uintptr_t a0, uintptr_t a1, uintptr_t a2, uintptr_t a3,
+    uintptr_t a4, uintptr_t a5, uintptr_t a6, uintptr_t a7) {
+    // Apollon's FreeLook path forces this predicate true while FreeLook is on.
+    if (g_modules[1].load()) return 1;
+    return g_freeLookAllowOrig
+        ? g_freeLookAllowOrig(a0,a1,a2,a3,a4,a5,a6,a7)
+        : 0;
 }
 
-void turnDeltaHook(void* self,void* deltaPtr) {
-    if (!self || !deltaPtr) {
-        if (g_turnOrig) g_turnOrig(self,deltaPtr);
-        return;
+uint64_t freeLookBlockHook(
+    uintptr_t a0, uintptr_t a1, uintptr_t a2, uintptr_t a3,
+    uintptr_t a4, uintptr_t a5, uintptr_t a6, uintptr_t a7) {
+    // A second Apollon FreeLook hook suppresses the normal camera/player path.
+    if (g_modules[1].load()) return 0;
+    return g_freeLookBlockOrig
+        ? g_freeLookBlockOrig(a0,a1,a2,a3,a4,a5,a6,a7)
+        : 0;
+}
+
+uintptr_t moduleAddress(uintptr_t offset) {
+    for (const auto& r : moduleRanges()) {
+        const uintptr_t span = r.end - r.base;
+        if (offset < span && offset + INLINE_HEAD <= span)
+            return r.base + offset;
     }
-    g_lastPlayer=self;
-    if (g_modules[7].load() && g_snapPending.exchange(false))
-        snapPlayer(self);
+    return 0;
+}
 
-    Vec2 d{};
-    std::memcpy(&d,deltaPtr,sizeof(d));
-    if (g_modules[0].load()) { d.x*=0.38f; d.y*=0.38f; }
-    if (g_turnOrig) g_turnOrig(self,&d);
+bool fixedPrologMatches(uintptr_t offset, const uint8_t expected[INLINE_HEAD]) {
+    const uintptr_t addr = moduleAddress(offset);
+    if (!addr) return false;
+    uint8_t got[INLINE_HEAD]{};
+    std::memcpy(got, reinterpret_cast<const void*>(addr), sizeof(got));
+    return std::memcmp(got, expected, sizeof(got)) == 0;
+}
+
+bool installFixedHook(
+    uintptr_t offset,
+    const uint8_t expected[INLINE_HEAD],
+    void* detour,
+    void** originalOut) {
+    const uintptr_t addr = moduleAddress(offset);
+    if (!addr || !fixedPrologMatches(offset, expected)) return false;
+    return installInlineHook(
+        reinterpret_cast<void*>(addr), detour, originalOut) != nullptr;
 }
 
 EGLBoolean swapHook(EGLDisplay display,EGLSurface surface) {
@@ -226,26 +256,57 @@ EGLBoolean swapHook(EGLDisplay display,EGLSurface surface) {
 
 void installZoomHook() {
     if (g_zoomHooked) return;
-    uintptr_t a=resolveSignature("? ? ? FC ? ? ? 6D ? ? ? A9 ? ? ? F9 ? ? ? A9 ? ? ? 91 08 40 20 1E");
-    if (!a) return;
+    static const uint8_t PROLOG[INLINE_HEAD] = {
+        0xEA,0x0F,0x1D,0xFC, 0xE9,0xA3,0x00,0x6D,
+        0xFD,0xFB,0x01,0xA9, 0xF3,0x17,0x00,0xF9
+    };
     void* tramp=nullptr;
-    if (installInlineHook(reinterpret_cast<void*>(a),reinterpret_cast<void*>(&getFovHook),&tramp)) {
-        g_getFovOrig=reinterpret_cast<GetFovFn>(tramp);
+    if (installFixedHook(
+            MC_ZOOM_OFFSET, PROLOG,
+            reinterpret_cast<void*>(&zoomHook),
+            &tramp)) {
+        g_zoomOrig=reinterpret_cast<ZoomFn>(tramp);
         g_zoomTrampoline=tramp;
         g_zoomHooked=true;
+        logi("Apollon Zoom target hooked @ +0x%llX",
+             static_cast<unsigned long long>(MC_ZOOM_OFFSET));
     }
 }
 
-void installTurnHook() {
-    if (g_turnHooked) return;
-    uintptr_t a=resolveSignature("? ? ? D1 ? ? ? FD ? ? ? A9 ? ? ? A9 ? ? ? A9 ? ? ? A9 ? ? ? 91 56 D0 3B D5 F3 03 00 AA F4 03 01 AA ? ? ? F9 ? ? ? F8 ? ? ? F9 ? ? ? F9");
-    if (!a) return;
-    void* tramp=nullptr;
-    if (installInlineHook(reinterpret_cast<void*>(a),reinterpret_cast<void*>(&turnDeltaHook),&tramp)) {
-        g_turnOrig=reinterpret_cast<TurnDeltaFn>(tramp);
-        g_turnTrampoline=tramp;
-        g_turnHooked=true;
+void installFreeLookHooks() {
+    if (!g_freeLookAllowHooked) {
+        static const uint8_t ALLOW_PROLOG[INLINE_HEAD] = {
+            0xFF,0xC3,0x01,0xD1, 0xFD,0x7B,0x04,0xA9,
+            0xF5,0x2B,0x00,0xF9, 0xF4,0x4F,0x06,0xA9
+        };
+        void* tramp=nullptr;
+        if (installFixedHook(
+                MC_FREELOOK_ALLOW_OFFSET, ALLOW_PROLOG,
+                reinterpret_cast<void*>(&freeLookAllowHook),
+                &tramp)) {
+            g_freeLookAllowOrig=reinterpret_cast<FreeLookBoolFn>(tramp);
+            g_freeLookAllowHooked=true;
+        }
     }
+
+    if (!g_freeLookBlockHooked) {
+        static const uint8_t BLOCK_PROLOG[INLINE_HEAD] = {
+            0xFF,0xC3,0x03,0xD1, 0xFD,0x7B,0x0B,0xA9,
+            0xF7,0x63,0x00,0xF9, 0xF6,0x57,0x0D,0xA9
+        };
+        void* tramp=nullptr;
+        if (installFixedHook(
+                MC_FREELOOK_BLOCK_OFFSET, BLOCK_PROLOG,
+                reinterpret_cast<void*>(&freeLookBlockHook),
+                &tramp)) {
+            g_freeLookBlockOrig=reinterpret_cast<FreeLookBoolFn>(tramp);
+            g_freeLookBlockHooked=true;
+        }
+    }
+
+    logi("Apollon FreeLook hooks: allow=%d block=%d",
+         g_freeLookAllowHooked ? 1 : 0,
+         g_freeLookBlockHooked ? 1 : 0);
 }
 
 bool resolveFullbright() {
@@ -332,22 +393,34 @@ void doSnapNow() {
 }
 
 void refreshCapabilities() {
-    // Startup must be non-invasive. Only probe signatures here; do not patch
-    // executable code or the EGL GOT table while Minecraft is still settling.
+    // Startup must be non-invasive. Only validate the exact runtime targets;
+    // hooks are installed later, on explicit user action.
     uint32_t caps=0;
 
-    static const char* ZOOM_SIG =
-        "? ? ? FC ? ? ? 6D ? ? ? A9 ? ? ? F9 ? ? ? A9 ? ? ? 91 08 40 20 1E";
-    static const char* TURN_SIG =
-        "? ? ? D1 ? ? ? FD ? ? ? A9 ? ? ? A9 ? ? ? A9 ? ? ? A9 ? ? ? 91 56 D0 3B D5 F3 03 00 AA F4 03 01 AA ? ? ? F9 ? ? ? F8 ? ? ? F9 ? ? ? F9";
+    static const uint8_t ZOOM_PROLOG[INLINE_HEAD] = {
+        0xEA,0x0F,0x1D,0xFC, 0xE9,0xA3,0x00,0x6D,
+        0xFD,0xFB,0x01,0xA9, 0xF3,0x17,0x00,0xF9
+    };
+    static const uint8_t ALLOW_PROLOG[INLINE_HEAD] = {
+        0xFF,0xC3,0x01,0xD1, 0xFD,0x7B,0x04,0xA9,
+        0xF5,0x2B,0x00,0xF9, 0xF4,0x4F,0x06,0xA9
+    };
+    static const uint8_t BLOCK_PROLOG[INLINE_HEAD] = {
+        0xFF,0xC3,0x03,0xD1, 0xFD,0x7B,0x0B,0xA9,
+        0xF7,0x63,0x00,0xF9, 0xF6,0x57,0x0D,0xA9
+    };
 
-    if (resolveSignature(ZOOM_SIG)) caps|=(1u<<0);
-    if (resolveSignature(TURN_SIG)) caps|=(1u<<7); // Snaplook.
+    if (fixedPrologMatches(MC_ZOOM_OFFSET, ZOOM_PROLOG)) caps|=(1u<<0);
+    if (fixedPrologMatches(MC_FREELOOK_ALLOW_OFFSET, ALLOW_PROLOG)
+            && fixedPrologMatches(MC_FREELOOK_BLOCK_OFFSET, BLOCK_PROLOG)) {
+        caps|=(1u<<1); // FreeLook.
+    }
     if (resolveFullbright()) caps|=(1u<<4);
 
     // Unlock FPS uses an EGL GOT patch and is intentionally not probed/applied
     // during automatic startup. It remains disabled until explicitly enabled.
     g_caps.store(caps);
+    g_capsReady.store(true);
     logi("MC ready. WLZ safe capabilities=0x%X",caps);
 }
 
@@ -406,6 +479,10 @@ Java_com_wlz_client_WlzRuntimeBridge_nativeIsMinecraftReady(JNIEnv*,jclass) {
 
 extern "C" JNIEXPORT jboolean JNICALL
 Java_com_wlz_client_WlzRuntimeBridge_nativeIsModuleSupported(JNIEnv*,jclass,jint index) {
+    if (!g_capsReady.load() && !moduleRanges().empty()) {
+        g_mcReady.store(true);
+        refreshCapabilities();
+    }
     return supported(index)?JNI_TRUE:JNI_FALSE;
 }
 
@@ -421,6 +498,11 @@ Java_com_wlz_client_WlzRuntimeBridge_nativeSetModule(JNIEnv*,jclass,jint index,j
 
     // Invasive native patches are installed only on explicit user action,
     // never during application startup.
+    if (!g_capsReady.load() && !moduleRanges().empty()) {
+        g_mcReady.store(true);
+        refreshCapabilities();
+    }
+
     if (on && index==0 && !g_zoomHooked) {
         installZoomHook();
         if (!g_zoomHooked) {
@@ -428,9 +510,9 @@ Java_com_wlz_client_WlzRuntimeBridge_nativeSetModule(JNIEnv*,jclass,jint index,j
             return;
         }
     }
-    if (on && index==7 && !g_turnHooked) {
-        installTurnHook();
-        if (!g_turnHooked) {
+    if (on && index==1 && (!g_freeLookAllowHooked || !g_freeLookBlockHooked)) {
+        installFreeLookHooks();
+        if (!g_freeLookAllowHooked || !g_freeLookBlockHooked) {
             g_modules[index].store(false);
             return;
         }
