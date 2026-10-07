@@ -69,6 +69,20 @@ jobs:
         run: |
           python3 patch/apply.py
 
+      - name: Remove obsolete Snaplook references
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("app/src/main/cpp/wlzclient.cpp")
+          s = p.read_text()
+          s = s.replace("void doSnapNow() {\\n    if (g_modules[7].load() && g_lastPlayer) {\\n        snapPlayer(g_lastPlayer);\\n        g_snapPending.store(false);\\n    }\\n}\\n\\n", "")
+          s = s.replace("    applyFullbright();\\n    doSnapNow();\\n}", "    applyFullbright();\\n}")
+          s = s.replace("    if (index==7 && on) {\\n        g_snapPending.store(true);\\n        doSnapNow();\\n    }\\n    if (index==4) applyFullbright();", "    // Snaplook index 7 is not part of the current Apollon port.\\n    if (index==4) applyFullbright();")
+          p.write_text(s)
+          PY
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
