@@ -99,8 +99,8 @@ public final class WlzInGameHud {
     }
 
     private void addQuickButtons() {
-        final String[] labels = {"ZOOM", "FPS", "BRIGHT", "SNAP", "MENU"};
-        final int[] actions = {0, 3, 4, 7, -1};
+        final String[] labels = {"ZOOM", "LOOK", "FPS", "BRIGHT", "MENU"};
+        final int[] actions = {0, 1, 3, 4, -1};
 
         int visible = 0;
         for (int i = 0; i < labels.length; i++) {
