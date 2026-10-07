@@ -202,10 +202,11 @@ struct Vec3 {
 void freeLookVectorHook(void* self, void* vecPtr) {
     if (!self || !vecPtr) return;
 
-    // This reproduces Apollon's exact target behavior:
-    // state = *(self + 0x208), then copy vec.{x,y,z} into
-    // state.{x,y,z}. In FreeLook mode 2, x/z are replaced with the
-    // current state values so camera movement no longer rotates the player.
+    // Mirrors the verified Apollon target behavior at this exact runtime:
+    // state = *(self + 0x208), then copy vec.{x,y,z} into state.{x,y,z}.
+    // While FreeLook is enabled, keep the current x/z rotation and accept
+    // only the incoming y component, so camera movement no longer rotates
+    // the player on those axes.
     uintptr_t state = 0;
     std::memcpy(&state, reinterpret_cast<uint8_t*>(self) + 0x208, sizeof(state));
     if (state < 0x1000ULL) return;
@@ -287,7 +288,7 @@ void installFreeLookHook() {
 
     static const uint8_t PROLOG[INLINE_HEAD] = {
         0x08,0x04,0x41,0xF9, 0x29,0x08,0x40,0xB9,
-        0x2A,0x00,0x40,0xF9, 0x09,0x20,0x00,0xB9
+        0x2A,0x00,0x40,0xF9, 0x09,0x21,0x00,0xB9
     };
 
     const uintptr_t addr = moduleAddress(MC_FREELOOK_VECTOR_OFFSET);
