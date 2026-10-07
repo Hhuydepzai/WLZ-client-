@@ -101,7 +101,7 @@ jobs:
           unzip -q manifest-editor.zip
           mv ManifestEditor-master manifest-editor
           chmod +x manifest-editor/gradlew
-          ./gradlew -p manifest-editor :lib:jar --no-daemon --stacktrace
+          ./manifest-editor/gradlew -p manifest-editor :lib:jar --no-daemon --stacktrace
           MANIFEST_EDITOR="$(find manifest-editor/lib/build/libs -maxdepth 1 -type f -name 'ManifestEditor*.jar' -print -quit)"
           test -s "$MANIFEST_EDITOR"
           java -jar "$MANIFEST_EDITOR" -h | grep -q -- '--activity'
