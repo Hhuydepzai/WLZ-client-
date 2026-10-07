@@ -104,7 +104,8 @@ jobs:
           ./manifest-editor/gradlew -p manifest-editor :lib:jar --no-daemon --stacktrace
           MANIFEST_EDITOR="$(find manifest-editor/lib/build/libs -maxdepth 1 -type f -name 'ManifestEditor*.jar' -print -quit)"
           test -s "$MANIFEST_EDITOR"
-          java -jar "$MANIFEST_EDITOR" -h | grep -q -- '--activity'
+          MANIFEST_HELP="$(java -jar "$MANIFEST_EDITOR" -h 2>&1 || true)"
+          printf '%s\n' "$MANIFEST_HELP" | grep -q -- '--activity'
           cp "$MANIFEST_EDITOR" ManifestEditor.jar
           test -s ManifestEditor.jar
 

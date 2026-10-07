@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import tempfile
 import zipfile
+from copy import copy
 from pathlib import Path
 import re
 
@@ -166,7 +167,9 @@ def write_zip(entries, out):
                 if Path(name).suffix.lower() in STORED
                 else info.compress_type
             )
-            z.writestr(info, data, compress_type=compress)
+            out_info = copy(info)
+            out_info.filename = name
+            z.writestr(out_info, data, compress_type=compress)
 
 
 def run_manifest_editor(manifest_editor, source_apk, out_apk):
