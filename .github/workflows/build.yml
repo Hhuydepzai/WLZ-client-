@@ -84,14 +84,41 @@ jobs:
         with:
           packages: 'platform-tools build-tools;35.0.0 platforms;android-35'
 
+      - name: Setup Java 8 for ManifestEditor
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '8'
+
+      - name: Build current ManifestEditor
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 --retry-delay 2 \
+            https://github.com/WindySha/ManifestEditor/archive/refs/heads/master.zip \
+            -o manifest-editor.zip
+          rm -rf manifest-editor ManifestEditor-master
+          unzip -q manifest-editor.zip
+          mv ManifestEditor-master manifest-editor
+          chmod +x manifest-editor/gradlew
+          ./gradlew -p manifest-editor :lib:jar --no-daemon --stacktrace
+          MANIFEST_EDITOR="$(find manifest-editor/lib/build/libs -maxdepth 1 -type f -name 'ManifestEditor*.jar' -print -quit)"
+          test -s "$MANIFEST_EDITOR"
+          java -jar "$MANIFEST_EDITOR" -h | grep -q -- '--activity'
+          cp "$MANIFEST_EDITOR" ManifestEditor.jar
+          test -s ManifestEditor.jar
+
+      - name: Setup Java 17 for final packaging
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
       - name: Prepare embedded Minecraft build
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist
-
-          curl -fL --retry 4 --retry-delay 2             https://github.com/WindySha/ManifestEditor/releases/download/v1.0.2/ManifestEditor-1.0.2.jar             -o ManifestEditor.jar
-          test -s ManifestEditor.jar
 
           python3 patch/embed_minecraft.py             --input minecraft_input             --wlz-apk app/build/outputs/apk/debug/app-debug.apk             --manifest-editor ManifestEditor.jar             --out dist/WLZ-Minecraft-unsigned.apk
 
