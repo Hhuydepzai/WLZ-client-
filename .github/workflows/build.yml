@@ -79,11 +79,6 @@ jobs:
           gradle assembleDebug --stacktrace
           test -f app/build/outputs/apk/debug/app-debug.apk
 
-      - name: Prepare Android framework for Apktool
-        shell: bash
-        run: |
-          bash patch/prepare_framework.sh apktool-framework framework-unpacked
-
       - name: Prepare embedded Minecraft build
         shell: bash
         run: |
@@ -92,6 +87,8 @@ jobs:
 
           curl -fL https://github.com/iBotPeaches/Apktool/releases/download/v3.0.3/apktool_3.0.3.jar -o apktool.jar
           test -s apktool.jar
+
+          bash patch/prepare_framework.sh apktool-framework framework-unpacked apktool.jar
 
           python3 patch/embed_minecraft.py             --input minecraft_input             --wlz-apk app/build/outputs/apk/debug/app-debug.apk             --apktool apktool.jar             --frame-path apktool-framework             --out dist/WLZ-Minecraft-unsigned.apk
 
