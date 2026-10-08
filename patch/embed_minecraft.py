@@ -3,13 +3,13 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import re
 import shutil
 import subprocess
 import tempfile
 import zipfile
 from copy import copy
 from pathlib import Path
-import re
 
 
 MC_SO = "lib/arm64-v8a/libminecraftpe.so"
@@ -105,13 +105,27 @@ def normalize(payload):
             copy_unique(src, libdir / src.name)
 
 
-def has_core(apk):
-    try:
-        with zipfile.ZipFile(apk) as z:
-            names = set(z.namelist())
-            return "AndroidManifest.xml" in names and MC_SO in names
-    except zipfile.BadZipFile:
-        return False
+def prune_duplicate_runtime_files(payload):
+    libdir = payload / "lib" / "arm64-v8a"
+    if not libdir.exists():
+        return
+
+    # Keep one canonical copy under Android's standard lib/<abi>/ location.
+    # The extracted runtime sometimes contains the same .so at the root and
+    # under arm64-v8a/, which previously inflated the final APK by hundreds
+    # of megabytes and could confuse package/runtime loading.
+    for p in sorted(payload.rglob("*.so")):
+        if p == libdir / p.name:
+            continue
+        canonical = libdir / p.name
+        if canonical.exists() and p.stat().st_size == canonical.stat().st_size:
+            if sha256(p) == sha256(canonical):
+                p.unlink()
+
+    # Remove now-empty duplicate ABI directories.
+    for d in [payload / "arm64-v8a"]:
+        if d.exists():
+            shutil.rmtree(d, ignore_errors=True)
 
 
 def source_apk(payload):
@@ -172,46 +186,31 @@ def write_zip(entries, out):
             z.writestr(out_info, data, compress_type=compress)
 
 
-def run_manifest_editor(manifest_editor, source_apk, out_apk):
-    # Keep Minecraft's original MainActivity/launcher intact.
-    # Give the packaged app its own Android package so it can coexist with
-    # the normal Minecraft install. Native libs stay inside the APK instead
-    # of being extracted to a second copy on disk.
-    run(
-        [
-            "java",
-            "-jar",
-            str(manifest_editor),
-            str(source_apk),
-            "-o",
-            str(out_apk),
-            "-pkg",
-            "com.wlz.client",
-            "-an",
-            "com.wlz.client.WlzApplication",
-            "-aa",
-            "android-extractNativeLibs:false",
-            "-act",
-            "com.wlz.client.WlzControlEditorActivity:false",
-        ]
-    )
-
-
 def inject(helper, base, out):
     base_entries = read_zip(base)
     helper_entries = read_zip(helper)
 
-    existing = set(base_entries)
+    helper_manifest = helper_entries.get("AndroidManifest.xml")
+    if helper_manifest is None:
+        raise SystemExit("WLZ helper APK has no compiled AndroidManifest.xml")
+
+    # The old build ran ManifestEditor against the reconstructed Minecraft
+    # manifest, which left resource-table references behind even though the
+    # reconstructed package did not contain resources.arsc. Use the helper
+    # manifest that Gradle compiled from patch/AndroidManifest.xml instead.
+    # It contains literal WLZ labeling and only system-resource references.
     out_entries = dict(base_entries)
+    out_entries["AndroidManifest.xml"] = helper_manifest
+    existing = set(out_entries)
 
     helper_dex = [
         n
         for n in helper_entries
         if re.fullmatch(r"classes[0-9]*\.dex", Path(n).name)
     ]
-    for index, name in enumerate(
-        sorted(helper_dex, key=lambda x: (0 if Path(x).name == "classes.dex" else 1, x)),
-        1,
+    for name in sorted(
+        helper_dex,
+        key=lambda x: (0 if Path(x).name == "classes.dex" else 1, x),
     ):
         nums = []
         for n in existing:
@@ -220,16 +219,13 @@ def inject(helper, base, out):
                 nums.append(1 if not m.group(1) else int(m.group(1)))
         next_num = max(nums or [1]) + 1
         dest = "classes.dex" if next_num == 1 else f"classes{next_num}.dex"
-        out_entries[dest] = (
-            helper_entries[name][0],
-            helper_entries[name][1],
-        )
+        out_entries[dest] = helper_entries[name]
         existing.add(dest)
 
-    for name, (info, data) in helper_entries.items():
+    for name, entry in helper_entries.items():
         if name.startswith("lib/arm64-v8a/") and name.endswith(".so"):
             if name not in existing:
-                out_entries[name] = (info, data)
+                out_entries[name] = entry
                 existing.add(name)
 
     write_zip(out_entries, out)
@@ -239,44 +235,39 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--input", required=True)
     ap.add_argument("--wlz-apk", required=True)
-    ap.add_argument("--manifest-editor", required=True)
+    # Kept for workflow compatibility. The final package no longer needs
+    # ManifestEditor because its manifest is taken from the compiled helper.
+    ap.add_argument("--manifest-editor", required=False)
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
 
     payload = Path(tempfile.mkdtemp(prefix="wlz-payload-"))
     source_rebuilt = Path(tempfile.mktemp(suffix=".apk"))
-    manifest_edited = Path(tempfile.mktemp(suffix=".apk"))
 
     try:
         root = Path(a.input).resolve()
         extract_zips(root, payload)
         normalize(payload)
+        prune_duplicate_runtime_files(payload)
 
         source = source_apk(payload)
         if source.name == "__reconstructed_minecraft.apk":
             rebuild(payload, source)
             source = payload / "__reconstructed_minecraft.apk"
 
-        run_manifest_editor(
-            Path(a.manifest_editor).resolve(),
-            source.resolve(),
-            manifest_edited,
-        )
-
-        inject(
-            Path(a.wlz_apk).resolve(),
-            manifest_edited.resolve(),
-            source_rebuilt,
-        )
-
         out = Path(a.out).resolve()
         out.parent.mkdir(parents=True, exist_ok=True)
+        inject(
+            Path(a.wlz_apk).resolve(),
+            source.resolve(),
+            source_rebuilt,
+        )
         source_rebuilt.replace(out)
+
         print("Embedded WLZ Minecraft client:", out)
     finally:
         shutil.rmtree(payload, ignore_errors=True)
         source_rebuilt.unlink(missing_ok=True)
-        manifest_edited.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
