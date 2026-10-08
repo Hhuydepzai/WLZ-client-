@@ -8,6 +8,7 @@
         <item name="android:navigationBarColor">#07090C</item>
         <item name="android:colorAccent">#FF7000</item>
         <item name="android:windowNoTitle">true</item>
-        <item name="android:windowBackground">#07090C</item>
+        <item name="android:windowBackground">#FFFFFF</item>
+        <item name="android:windowDisablePreview">true</item>
     </style>
 </resources>
