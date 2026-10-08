@@ -541,6 +541,16 @@ public final class WlzInGameHud {
         return d;
     }
 
+    private LinearLayout.LayoutParams lp(int w, int h) {
+        return new LinearLayout.LayoutParams(w, h);
+    }
+
+    private LinearLayout.LayoutParams top(int margin) {
+        LinearLayout.LayoutParams p = lp(-1, -2);
+        p.topMargin = dp(margin);
+        return p;
+    }
+
     private SharedPreferences prefs() {
         return activity.getSharedPreferences("wlz_settings", Activity.MODE_PRIVATE);
     }
