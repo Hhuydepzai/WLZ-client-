@@ -4,11 +4,9 @@
         android:name=".WlzApplication"
         android:allowBackup="false"
         android:label="WLZ Client"
-        android:icon="@drawable/wlz_icon"
-        android:roundIcon="@drawable/wlz_icon"
         android:supportsRtl="true"
         android:extractNativeLibs="true"
-        android:theme="@style/AppTheme">
+        android:theme="@android:style/Theme.Material.NoActionBar">
 
         <activity
             android:name="com.mojang.minecraftpe.MainActivity"
