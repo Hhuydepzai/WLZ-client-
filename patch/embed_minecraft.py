@@ -203,6 +203,18 @@ def inject(helper, base, out):
     out_entries["AndroidManifest.xml"] = helper_manifest
     existing = set(out_entries)
 
+    # Keep the newest WLZ code/features unchanged, but also package the
+    # compiled WLZ resources. The helper resource bundle contains the WLZ
+    # v0.6.4 icon/splash and its resource table. The previous build dropped
+    # these entries, so the APK installed with a generic Android icon.
+    if "resources.arsc" in helper_entries:
+        out_entries["resources.arsc"] = helper_entries["resources.arsc"]
+        existing.add("resources.arsc")
+    for name, entry in helper_entries.items():
+        if name.startswith("res/"):
+            out_entries[name] = entry
+            existing.add(name)
+
     helper_dex = [
         n
         for n in helper_entries
