@@ -19,7 +19,8 @@ public final class WlzKeyMapper {
             KeyEvent.KEYCODE_R, KeyEvent.KEYCODE_G, KeyEvent.KEYCODE_F3
     };
 
-    private static final String PREFS = "wlz_keymap";
+    private static final String KEYMAP_PREFS = "wlz_keymap";
+    private static final String SETTINGS_PREFS = "wlz_settings";
 
     private WlzKeyMapper() {}
 
@@ -31,8 +32,17 @@ public final class WlzKeyMapper {
     public static void setKey(Context context, int action, int keyCode) {
         if (action < 0 || action >= ACTIONS.length) return;
         prefs(context).edit().putInt("key_" + action, keyCode).apply();
-        context.getSharedPreferences("wlz_settings", Context.MODE_PRIVATE)
-                .edit().putBoolean("hotkeys_enabled", true).apply();
+        setHotkeysEnabled(context, true);
+    }
+
+    public static boolean areHotkeysEnabled(Context context) {
+        return context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+                .getBoolean("hotkeys_enabled", false);
+    }
+
+    public static void setHotkeysEnabled(Context context, boolean enabled) {
+        context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+                .edit().putBoolean("hotkeys_enabled", enabled).apply();
         try { WlzInGameHud.refreshAllHotkeys(); } catch (Throwable ignored) {}
     }
 
@@ -44,6 +54,8 @@ public final class WlzKeyMapper {
     }
 
     public static boolean trigger(Context context, int keyCode) {
+        if (!areHotkeysEnabled(context)) return false;
+
         for (int i = 0; i < ACTIONS.length; i++) {
             if (getKey(context, i) == keyCode) {
                 boolean enabled = WlzModuleManager.isModuleEnabled(context, i);
@@ -56,11 +68,13 @@ public final class WlzKeyMapper {
 
     public static Map<String, Integer> snapshot(Context context) {
         Map<String, Integer> out = new LinkedHashMap<String, Integer>();
-        for (int i = 0; i < ACTIONS.length; i++) out.put(ACTIONS[i], getKey(context, i));
+        for (int i = 0; i < ACTIONS.length; i++) {
+            out.put(ACTIONS[i], getKey(context, i));
+        }
         return out;
     }
 
     private static SharedPreferences prefs(Context context) {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        return context.getSharedPreferences(KEYMAP_PREFS, Context.MODE_PRIVATE);
     }
 }
