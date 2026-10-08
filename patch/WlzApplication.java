@@ -1,22 +1,9 @@
 package com.wlz.client;
 
 import android.app.Activity;
-import android.graphics.Color;
-import android.graphics.Typeface;
-import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
-import android.view.Gravity;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.Button;
-import android.widget.FrameLayout;
-import android.widget.LinearLayout;
-import android.widget.TextView;
 
-import java.util.Map;
-import java.util.WeakHashMap;
-
-{
+public final class WlzApplication extends com.zihao_il.MinecraftApplication {
     private static final long NATIVE_ATTACH_DELAY_MS = 3500L;
 
     private final ActivityLifecycleCallbacks callbacks = new ActivityLifecycleCallbacks() {
@@ -29,7 +16,10 @@ import java.util.WeakHashMap;
             activity.getWindow().getDecorView().postDelayed(new Runnable() {
                 @Override public void run() {
                     if (!activity.isFinishing() && !activity.isDestroyed()) {
-                        try { WlzInGameHud.attach(activity); } catch (Throwable ignored) {}
+                        try {
+                            WlzInGameHud.attach(activity);
+                        } catch (Throwable ignored) {
+                        }
                     }
                 }
             }, NATIVE_ATTACH_DELAY_MS);
@@ -43,7 +33,10 @@ import java.util.WeakHashMap;
 
         @Override public void onActivityDestroyed(Activity activity) {
             if (isMinecraft(activity)) {
-                try { WlzInGameHud.detach(activity); } catch (Throwable ignored) {}
+                try {
+                    WlzInGameHud.detach(activity);
+                } catch (Throwable ignored) {
+                }
             }
         }
     };
@@ -51,14 +44,13 @@ import java.util.WeakHashMap;
     @Override
     public void onCreate() {
         if (isMinecraftProcess()) {
-            // Only the Minecraft process is allowed to run the original
+            // Only the dedicated Minecraft process runs the original
             // MinecraftApplication bootstrap.
             super.onCreate();
             WlzModuleManager.initialize(this);
             registerActivityLifecycleCallbacks(callbacks);
         } else {
-            // Launcher process must stay lightweight and must not bootstrap
-            // the native Minecraft runtime.
+            // Launcher process remains lightweight.
             WlzModuleManager.initialize(this);
         }
     }
