@@ -55,12 +55,21 @@ public final class WlzApplication extends com.zihao_il.MinecraftApplication {
         }
     };
 
+    private boolean minecraftBootstrapped = false;
+
     @Override
-    public void onCreate() {
-        // Keep the original Minecraft application bootstrap untouched.
-        super.onCreate();
+    public synchronized void onCreate() {
+        // Defer the heavy Minecraft bootstrap. The launcher must render first.
         WlzModuleManager.initialize(this);
         registerActivityLifecycleCallbacks(callbacks);
+    }
+
+    public synchronized void ensureMinecraftBootstrap() {
+        if (minecraftBootstrapped) return;
+        // Bootstrap the original Minecraft Application only when the user
+        // actually enters Minecraft.
+        super.onCreate();
+        minecraftBootstrapped = true;
     }
 
     private void showLauncher(final Activity activity) {
