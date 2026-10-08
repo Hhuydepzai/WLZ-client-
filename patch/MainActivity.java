@@ -1,12 +1,14 @@
 package com.wlz.client;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
 import android.view.Window;
+import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -15,11 +17,12 @@ import android.widget.Toast;
 public final class MainActivity extends Activity {
     private static final String MC_ACTIVITY = "com.mojang.minecraftpe.MainActivity";
     private static final int BG = Color.rgb(7, 9, 12);
+    private static final int PANEL = Color.rgb(15, 18, 23);
+    private static final int STROKE = Color.rgb(47, 54, 64);
     private static final int ORANGE = Color.rgb(255, 112, 0);
     private static final int TEXT = Color.rgb(242, 245, 249);
     private static final int MUTED = Color.rgb(145, 154, 166);
 
-    private FrameLayout root;
     private TextView status;
 
     @Override
@@ -30,62 +33,102 @@ public final class MainActivity extends Activity {
         w.setStatusBarColor(BG);
         w.setNavigationBarColor(BG);
 
-        root = new FrameLayout(this);
+        FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(BG);
         setContentView(root);
+        root.addView(buildLauncher(), new FrameLayout.LayoutParams(-1, -1));
 
-        root.addView(buildSplash(), new FrameLayout.LayoutParams(-1, -1));
-
-        root.postDelayed(new Runnable() {
-            @Override public void run() {
-                launchMinecraft();
-            }
-        }, 750L);
+        updateRuntimeStatus();
     }
 
-    private View buildSplash() {
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setGravity(Gravity.CENTER);
-        box.setPadding(dp(24), dp(24), dp(24), dp(24));
+    private View buildLauncher() {
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setGravity(Gravity.CENTER_HORIZONTAL);
+        page.setPadding(dp(24), dp(28), dp(24), dp(24));
+
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setGravity(Gravity.CENTER_HORIZONTAL);
+        card.setPadding(dp(20), dp(22), dp(20), dp(18));
+        card.setBackground(round(PANEL, STROKE, 1, 20));
 
         WlzLogoView logo = new WlzLogoView(this);
-        box.addView(logo, centered(dp(128), dp(128)));
+        card.addView(logo, centered(dp(116), dp(116)));
 
-        TextView title = text("WLZ CLIENT", 22, TEXT, true);
+        TextView title = text("WLZ LAUNCHER", 23, TEXT, true);
         title.setGravity(Gravity.CENTER);
-        box.addView(title, topCentered(14));
+        card.addView(title, topCentered(12));
 
-        View line = new View(this);
-        line.setBackgroundColor(ORANGE);
-        box.addView(line, centered(dp(92), dp(2), 10));
+        TextView subtitle = text("BEDROCK CLIENT", 10, ORANGE, true);
+        subtitle.setGravity(Gravity.CENTER);
+        card.addView(subtitle, topCentered(4));
 
-        status = text("ĐANG KHỞI ĐỘNG", 9, MUTED, true);
+        status = text("ĐANG KIỂM TRA RUNTIME...", 9, MUTED, true);
         status.setGravity(Gravity.CENTER);
-        box.addView(status, topCentered(10));
-        return box;
+        card.addView(status, topCentered(12));
+
+        Button play = button("CHƠI MINECRAFT");
+        play.setTextSize(12);
+        play.setBackground(round(ORANGE, ORANGE, 1, 14));
+        play.setOnClickListener(v -> launchMinecraft());
+        card.addView(play, topCenteredButton(dp(52), 16));
+
+        Button map = button("MAP PHÍM + CHỈNH HUD");
+        map.setOnClickListener(v ->
+                startActivity(new Intent(this, WlzControlEditorActivity.class)));
+        card.addView(map, topCenteredButton(dp(48), 8));
+
+        TextView info = text(
+                "Zoom  •  FreeLook  •  Unlock FPS  •  Fullbright\n"
+                        + "OTG keymap  •  touch controls  •  ClickGUI",
+                9, MUTED, false);
+        info.setGravity(Gravity.CENTER);
+        card.addView(info, topCentered(12));
+
+        page.addView(card, new LinearLayout.LayoutParams(-1, -2));
+
+        TextView footer = text("WLZ CLIENT 1.0.0  •  arm64-v8a", 8, MUTED, false);
+        footer.setGravity(Gravity.CENTER);
+        page.addView(footer, topCentered(14));
+
+        return page;
+    }
+
+    private void updateRuntimeStatus() {
+        if (hasMinecraftRuntime()) {
+            status.setText("RUNTIME SẴN  •  ARM64");
+        } else {
+            status.setText("THIẾU MINECRAFT RUNTIME");
+        }
     }
 
     private void launchMinecraft() {
         if (!hasMinecraftRuntime()) {
-            status.setText("MISSING MINECRAFT RUNTIME");
+            status.setText("MINECRAFT RUNTIME KHÔNG SẴN SÀNG");
             Toast.makeText(this,
-                    "WLZ chưa được gắn Minecraft runtime.",
+                    "WLZ chưa có Minecraft runtime tích hợp.",
                     Toast.LENGTH_LONG).show();
             return;
         }
 
         try {
-            android.content.Intent intent = new android.content.Intent();
+            Intent intent = new Intent();
             intent.setClassName(this, MC_ACTIVITY);
-            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    | android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             startActivity(intent);
-            finish();
         } catch (Throwable e) {
-            status.setText("MINECRAFT START FAILED");
-            Toast.makeText(this, "Minecraft runtime khởi động lỗi.", Toast.LENGTH_LONG).show();
+            status.setText("KHỞI ĐỘNG MINECRAFT THẤT BẠI");
+            Toast.makeText(this,
+                    "Không thể mở Minecraft runtime.",
+                    Toast.LENGTH_LONG).show();
         }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (status != null) updateRuntimeStatus();
     }
 
     private boolean hasMinecraftRuntime() {
@@ -95,6 +138,17 @@ public final class MainActivity extends Activity {
         } catch (Throwable ignored) {
             return false;
         }
+    }
+
+    private Button button(String title) {
+        Button b = new Button(this);
+        b.setText(title);
+        b.setTextColor(TEXT);
+        b.setTextSize(10);
+        b.setAllCaps(false);
+        b.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        b.setPadding(dp(8), 0, dp(8), 0);
+        return b;
     }
 
     private TextView text(String value, float size, int color, boolean bold) {
@@ -112,17 +166,27 @@ public final class MainActivity extends Activity {
         return p;
     }
 
-    private LinearLayout.LayoutParams centered(int w, int h, int top) {
-        LinearLayout.LayoutParams p = centered(w, h);
-        p.topMargin = dp(top);
-        return p;
-    }
-
     private LinearLayout.LayoutParams topCentered(int top) {
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
         p.gravity = Gravity.CENTER_HORIZONTAL;
         p.topMargin = dp(top);
         return p;
+    }
+
+    private LinearLayout.LayoutParams topCenteredButton(int h, int top) {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, h);
+        p.gravity = Gravity.CENTER_HORIZONTAL;
+        p.topMargin = dp(top);
+        return p;
+    }
+
+    private android.graphics.drawable.GradientDrawable round(int fill, int stroke, int width, int radius) {
+        android.graphics.drawable.GradientDrawable d =
+                new android.graphics.drawable.GradientDrawable();
+        d.setColor(fill);
+        d.setCornerRadius(dp(radius));
+        d.setStroke(dp(width), stroke);
+        return d;
     }
 
     private int dp(int value) {
