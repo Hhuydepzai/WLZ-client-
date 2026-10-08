@@ -67,8 +67,7 @@ public final class MainActivity extends Activity {
         page.addView(play, topCenteredButton(dp(54), 14));
 
         TextView hint = text(
-                "Trong game: chạm nút tròn WLZ để mở ClickGUI.
-"
+                "Trong game: chạm nút tròn WLZ để mở ClickGUI.\n"
                         + "MAP PHÍM + HOTKEY nằm bên trong nút tròn.",
                 9, MUTED, false);
         hint.setGravity(Gravity.CENTER);
