@@ -1,7 +1,6 @@
 package com.wlz.client;
 
 import android.app.Activity;
-import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -51,7 +50,9 @@ public final class WlzInGameHud {
 
     private TextView fpsText;
     private FrameLayout radialMenu;
+    private LinearLayout keyMapperPanel;
     private boolean radialVisible;
+    private int captureAction = -1;
 
     private Window.Callback originalCallback;
     private Window.Callback callbackProxy;
@@ -124,10 +125,21 @@ public final class WlzInGameHud {
                                     && args[0] instanceof KeyEvent) {
                                 KeyEvent event = (KeyEvent) args[0];
                                 if (event.getAction() == KeyEvent.ACTION_DOWN
-                                        && !event.isLongPress()
-                                        && WlzKeyMapper.trigger(activity, event.getKeyCode())) {
-                                    applyVisuals();
-                                    return true;
+                                        && !event.isLongPress()) {
+                                    if (captureAction >= 0) {
+                                        int key = event.getKeyCode();
+                                        WlzKeyMapper.setKey(activity, captureAction, key);
+                                        captureAction = -1;
+                                        rebuildKeyMapper();
+                                        if (!WlzKeyMapper.areHotkeysEnabled(activity)) {
+                                            restoreKeyHook();
+                                        }
+                                        return true;
+                                    }
+                                    if (WlzKeyMapper.trigger(activity, event.getKeyCode())) {
+                                        applyVisuals();
+                                        return true;
+                                    }
                                 }
                             }
                             return method.invoke(originalCallback, args);
@@ -257,7 +269,96 @@ public final class WlzInGameHud {
 
     private void openKeyMapper() {
         closeRadialMenu();
-        activity.startActivity(new Intent(activity, WlzControlEditorActivity.class));
+        showKeyMapper();
+    }
+
+    private void showKeyMapper() {
+        closeKeyMapper();
+        keyMapperPanel = new LinearLayout(activity);
+        keyMapperPanel.setOrientation(LinearLayout.VERTICAL);
+        keyMapperPanel.setPadding(dp(14), dp(14), dp(14), dp(14));
+        keyMapperPanel.setBackground(round(Color.WHITE, ORANGE, 2, 20));
+
+        LinearLayout head = new LinearLayout(activity);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        TextView title = text("WLZ • MAP PHÍM", 16, ORANGE, true);
+        head.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+
+        Button hotkey = button(WlzKeyMapper.areHotkeysEnabled(activity)
+                ? "HOTKEY: BẬT" : "HOTKEY: TẮT");
+        hotkey.setTextColor(ORANGE);
+        hotkey.setOnClickListener(v -> {
+            WlzKeyMapper.setHotkeysEnabled(activity,
+                    !WlzKeyMapper.areHotkeysEnabled(activity));
+            hotkey.setText(WlzKeyMapper.areHotkeysEnabled(activity)
+                    ? "HOTKEY: BẬT" : "HOTKEY: TẮT");
+            if (WlzKeyMapper.areHotkeysEnabled(activity)) installKeyHook();
+            else if (captureAction < 0) restoreKeyHook();
+        });
+        head.addView(hotkey, lp(dp(116), dp(42)));
+
+        Button close = button("X");
+        close.setTextColor(ORANGE);
+        close.setOnClickListener(v -> closeKeyMapper());
+        head.addView(close, lp(dp(46), dp(42)));
+        keyMapperPanel.addView(head);
+
+        TextView info = text("Chọn MAP rồi bấm phím OTG để gán.", 9, MUTED, false);
+        keyMapperPanel.addView(info, top(7));
+
+        LinearLayout list = new LinearLayout(activity);
+        list.setOrientation(LinearLayout.VERTICAL);
+
+        for (int i = 0; i < NAMES.length; i++) {
+            final int action = i;
+            LinearLayout row = new LinearLayout(activity);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(8), dp(5), dp(8), dp(5));
+            row.setBackground(round(Color.rgb(247,247,249),
+                    Color.rgb(225,225,229), 1, 12));
+
+            row.addView(text(NAMES[i], 10, Color.rgb(35,35,38), true),
+                    new LinearLayout.LayoutParams(0, dp(46), 1));
+
+            Button key = button(WlzKeyMapper.keyName(
+                    WlzKeyMapper.getKey(activity, action)));
+            key.setTextColor(ORANGE);
+            key.setOnClickListener(v -> {
+                captureAction = action;
+                if (!WlzKeyMapper.areHotkeysEnabled(activity)) {
+                    installKeyHook();
+                }
+                rebuildKeyMapper();
+            });
+            row.addView(key, lp(dp(90), dp(42)));
+
+            LinearLayout.LayoutParams rp = lp(-1, dp(51));
+            rp.bottomMargin = dp(5);
+            list.addView(row, rp);
+        }
+
+        ScrollView scroll = new ScrollView(activity);
+        scroll.addView(list);
+        keyMapperPanel.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+
+        FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(
+                Math.min(dp(360), Math.max(dp(300), decor.getWidth() - dp(20))),
+                Math.min(dp(520), Math.max(dp(360), decor.getHeight() - dp(40))));
+        pp.gravity = Gravity.CENTER;
+        layer.addView(keyMapperPanel, pp);
+    }
+
+    private void rebuildKeyMapper() {
+        showKeyMapper();
+    }
+
+    private void closeKeyMapper() {
+        if (keyMapperPanel != null) {
+            layer.removeView(keyMapperPanel);
+            keyMapperPanel = null;
+        }
+        captureAction = -1;
+        if (!WlzKeyMapper.areHotkeysEnabled(activity)) restoreKeyHook();
     }
 
     private void closeRadialMenu() {
