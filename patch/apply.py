@@ -15,16 +15,25 @@ def copy(name: str, dest: Path):
     shutil.copyfile(src, dest)
 
 def prepare_pairip_stub():
-    # WlzApplication keeps Minecraft's original PairIP Application as its
-    # superclass, preserving Minecraft's own application bootstrap.
-    # The stub is compile-only and is never packaged into the WLZ helper APK.
+    # These stubs are compile-only. The real classes are supplied by the
+    # embedded Minecraft dex files in the final package.
     stub_root = APP / ".pairip_stub"
-    src_dir = stub_root / "com/pairip/application"
-    src_dir.mkdir(parents=True, exist_ok=True)
-    java = src_dir / "Application.java"
-    java.write_text(
+
+    pairip_dir = stub_root / "com/pairip/application"
+    pairip_dir.mkdir(parents=True, exist_ok=True)
+    pairip_java = pairip_dir / "Application.java"
+    pairip_java.write_text(
         "package com.pairip.application;\n"
         "public class Application extends android.app.Application {}\n",
+        encoding="utf-8",
+    )
+
+    mc_dir = stub_root / "com/zihao_il"
+    mc_dir.mkdir(parents=True, exist_ok=True)
+    mc_java = mc_dir / "MinecraftApplication.java"
+    mc_java.write_text(
+        "package com.zihao_il;\n"
+        "public class MinecraftApplication extends com.pairip.application.Application {}\n",
         encoding="utf-8",
     )
 
@@ -36,18 +45,24 @@ def prepare_pairip_stub():
 
     sdk = next((p for p in reversed(candidates) if p.exists()), None)
     if sdk is None:
-        raise SystemExit("Android SDK android.jar not found for PairIP compile stub")
+        raise SystemExit("Android SDK android.jar not found for compile stubs")
 
     classes = stub_root / "classes"
     classes.mkdir(parents=True, exist_ok=True)
     subprocess.run(
-        ["javac", "-source", "8", "-target", "8", "-cp", str(sdk),
-         "-d", str(classes), str(pairip_java), str(mc_java)],
+        [
+            "javac", "-source", "8", "-target", "8", "-cp", str(sdk),
+            "-d", str(classes), str(pairip_java), str(mc_java)
+        ],
         check=True,
     )
+
     jar = APP / "pairip-stub.jar"
     jar.unlink(missing_ok=True)
-    subprocess.run(["jar", "cf", str(jar), "-C", str(classes), "."], check=True)
+    subprocess.run(
+        ["jar", "cf", str(jar), "-C", str(classes), "."],
+        check=True,
+    )
     shutil.rmtree(stub_root, ignore_errors=True)
 
 copy("build.gradle", APP / "build.gradle")
