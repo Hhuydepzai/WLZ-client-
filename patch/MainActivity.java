@@ -91,9 +91,9 @@ public final class MainActivity extends Activity {
             Class<?> activityClass = Class.forName(MC_ACTIVITY, false, getClassLoader());
             Intent intent = new Intent(this, activityClass);
             intent.setComponent(new ComponentName(this, activityClass));
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
-                    | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+            intent.addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
             startActivity(intent);
+            finish();
         } catch (Throwable e) {
             status.setText("KHÔNG MỞ ĐƯỢC MINECRAFT");
             Toast.makeText(this, "WLZ không khởi động được Minecraft runtime.", Toast.LENGTH_LONG).show();
