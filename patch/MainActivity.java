@@ -88,6 +88,9 @@ public final class MainActivity extends Activity {
 
     private void launchMinecraft() {
         try {
+            if (getApplication() instanceof WlzApplication) {
+                ((WlzApplication) getApplication()).ensureMinecraftBootstrap();
+            }
             Class<?> activityClass = Class.forName(MC_ACTIVITY, false, getClassLoader());
             Intent intent = new Intent(this, activityClass);
             intent.setComponent(new ComponentName(this, activityClass));
