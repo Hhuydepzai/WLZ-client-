@@ -1,6 +1,7 @@
 package com.wlz.client;
 
 import android.app.Activity;
+import android.content.ComponentName;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -16,12 +17,13 @@ import android.widget.Toast;
 
 public final class MainActivity extends Activity {
     private static final String MC_ACTIVITY = "com.mojang.minecraftpe.MainActivity";
-    private static final int BG = Color.rgb(7, 9, 12);
-    private static final int PANEL = Color.rgb(15, 18, 23);
-    private static final int STROKE = Color.rgb(47, 54, 64);
+
+    private static final int BG = Color.WHITE;
+    private static final int PANEL = Color.rgb(248, 248, 248);
+    private static final int STROKE = Color.rgb(230, 230, 230);
     private static final int ORANGE = Color.rgb(255, 112, 0);
-    private static final int TEXT = Color.rgb(242, 245, 249);
-    private static final int MUTED = Color.rgb(145, 154, 166);
+    private static final int TEXT = Color.rgb(28, 28, 30);
+    private static final int MUTED = Color.rgb(115, 118, 124);
 
     private TextView status;
 
@@ -36,99 +38,67 @@ public final class MainActivity extends Activity {
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(BG);
         setContentView(root);
-        root.addView(buildLauncher(), new FrameLayout.LayoutParams(-1, -1));
+
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setGravity(Gravity.CENTER_HORIZONTAL);
+        page.setPadding(dp(26), dp(24), dp(26), dp(24));
+
+        TextView brand = text("WLZ CLIENT", 26, ORANGE, true);
+        brand.setGravity(Gravity.CENTER);
+        page.addView(brand, topCentered(4));
+
+        TextView subtitle = text("BEDROCK • ARM64", 10, MUTED, true);
+        subtitle.setGravity(Gravity.CENTER);
+        page.addView(subtitle, topCentered(3));
+
+        WlzLogoView logo = new WlzLogoView(this);
+        page.addView(logo, centered(dp(178), dp(132)));
+
+        status = text("ĐANG KIỂM TRA GAME RUNTIME...", 9, MUTED, true);
+        status.setGravity(Gravity.CENTER);
+        page.addView(status, topCentered(8));
+
+        Button play = button("▶  CHƠI MINECRAFT");
+        play.setTextSize(13);
+        play.setTextColor(Color.WHITE);
+        play.setBackground(round(ORANGE, ORANGE, 1, 16));
+        play.setOnClickListener(v -> launchMinecraft());
+        page.addView(play, topCenteredButton(dp(54), 14));
+
+        TextView hint = text(
+                "Trong game: chạm nút tròn WLZ để mở ClickGUI.
+"
+                        + "MAP PHÍM + HOTKEY nằm bên trong nút tròn.",
+                9, MUTED, false);
+        hint.setGravity(Gravity.CENTER);
+        page.addView(hint, topCentered(10));
+
+        FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(-1, -1);
+        pp.gravity = Gravity.CENTER;
+        root.addView(page, pp);
 
         updateRuntimeStatus();
     }
 
-    private View buildLauncher() {
-        LinearLayout page = new LinearLayout(this);
-        page.setOrientation(LinearLayout.VERTICAL);
-        page.setGravity(Gravity.CENTER_HORIZONTAL);
-        page.setPadding(dp(24), dp(28), dp(24), dp(24));
-
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setGravity(Gravity.CENTER_HORIZONTAL);
-        card.setPadding(dp(20), dp(22), dp(20), dp(18));
-        card.setBackground(round(PANEL, STROKE, 1, 20));
-
-        WlzLogoView logo = new WlzLogoView(this);
-        card.addView(logo, centered(dp(116), dp(116)));
-
-        TextView title = text("WLZ LAUNCHER", 23, TEXT, true);
-        title.setGravity(Gravity.CENTER);
-        card.addView(title, topCentered(12));
-
-        TextView subtitle = text("BEDROCK CLIENT", 10, ORANGE, true);
-        subtitle.setGravity(Gravity.CENTER);
-        card.addView(subtitle, topCentered(4));
-
-        status = text("ĐANG KIỂM TRA RUNTIME...", 9, MUTED, true);
-        status.setGravity(Gravity.CENTER);
-        card.addView(status, topCentered(12));
-
-        Button play = button("CHƠI MINECRAFT");
-        play.setTextSize(12);
-        play.setBackground(round(ORANGE, ORANGE, 1, 14));
-        play.setOnClickListener(v -> launchMinecraft());
-        card.addView(play, topCenteredButton(dp(52), 16));
-
-        Button map = button("MAP PHÍM + CHỈNH HUD");
-        map.setOnClickListener(v ->
-                startActivity(new Intent(this, WlzControlEditorActivity.class)));
-        card.addView(map, topCenteredButton(dp(48), 8));
-
-        TextView info = text(
-                "Zoom  •  FreeLook  •  Unlock FPS  •  Fullbright\n"
-                        + "OTG keymap  •  touch controls  •  ClickGUI",
-                9, MUTED, false);
-        info.setGravity(Gravity.CENTER);
-        card.addView(info, topCentered(12));
-
-        page.addView(card, new LinearLayout.LayoutParams(-1, -2));
-
-        TextView footer = text("WLZ CLIENT 1.0.0  •  arm64-v8a", 8, MUTED, false);
-        footer.setGravity(Gravity.CENTER);
-        page.addView(footer, topCentered(14));
-
-        return page;
-    }
-
     private void updateRuntimeStatus() {
-        if (hasMinecraftRuntime()) {
-            status.setText("RUNTIME SẴN  •  ARM64");
-        } else {
-            status.setText("THIẾU MINECRAFT RUNTIME");
-        }
+        status.setText(hasMinecraftRuntime()
+                ? "RUNTIME SẴN • SẴN SÀNG"
+                : "THIẾU MINECRAFT RUNTIME");
     }
 
     private void launchMinecraft() {
-        if (!hasMinecraftRuntime()) {
-            status.setText("MINECRAFT RUNTIME KHÔNG SẴN SÀNG");
-            Toast.makeText(this,
-                    "WLZ chưa có Minecraft runtime tích hợp.",
-                    Toast.LENGTH_LONG).show();
-            return;
-        }
-
         try {
-            Intent intent = new Intent();
-            intent.setClassName(this, MC_ACTIVITY);
-            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            Class<?> activityClass = Class.forName(MC_ACTIVITY, false, getClassLoader());
+            Intent intent = new Intent(this, activityClass);
+            intent.setComponent(new ComponentName(this, activityClass));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                    | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
             startActivity(intent);
         } catch (Throwable e) {
-            status.setText("KHỞI ĐỘNG MINECRAFT THẤT BẠI");
-            Toast.makeText(this,
-                    "Không thể mở Minecraft runtime.",
-                    Toast.LENGTH_LONG).show();
+            status.setText("KHÔNG MỞ ĐƯỢC MINECRAFT");
+            Toast.makeText(this, "WLZ không khởi động được Minecraft runtime.", Toast.LENGTH_LONG).show();
         }
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        if (status != null) updateRuntimeStatus();
     }
 
     private boolean hasMinecraftRuntime() {
@@ -146,7 +116,7 @@ public final class MainActivity extends Activity {
         b.setTextColor(TEXT);
         b.setTextSize(10);
         b.setAllCaps(false);
-        b.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        b.setTypeface(Typeface.DEFAULT_BOLD);
         b.setPadding(dp(8), 0, dp(8), 0);
         return b;
     }
@@ -156,7 +126,7 @@ public final class MainActivity extends Activity {
         t.setText(value);
         t.setTextSize(size);
         t.setTextColor(color);
-        if (bold) t.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        if (bold) t.setTypeface(Typeface.DEFAULT_BOLD);
         return t;
     }
 
