@@ -159,7 +159,7 @@ jobs:
           # Verify the final package is WLZ, not com.mojang.minecraftpe.
           AAPT2="${ANDROID_HOME}/build-tools/${BT}/aapt2"
           BADGING="$("${AAPT2}" dump badging dist/WLZ-Minecraft.apk)"
-          printf '%s\n' "$BADGING" | grep -q "package: name='com.wlz.client230'"
+          printf '%s\n' "$BADGING" | grep -q "package: name='com.mojang.minecraftpe'"
           test -s dist/WLZ-Minecraft.apk
 
       - name: Show artifacts
