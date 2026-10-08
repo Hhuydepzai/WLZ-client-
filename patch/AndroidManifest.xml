@@ -1,35 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:name="com.zihao_il.MinecraftApplication"
+        android:name=".WlzApplication"
         android:allowBackup="false"
         android:label="WLZ Client"
         android:supportsRtl="true"
         android:extractNativeLibs="true"
         android:theme="@style/AppTheme">
 
-        <provider
-            android:name="com.wlz.client.WlzBootstrapProvider"
-            android:authorities="com.wlz.client230.wlz-bootstrap"
-            android:exported="false"
-            android:initOrder="100" />
-
         <activity
             android:name="com.mojang.minecraftpe.MainActivity"
             android:exported="true"
+            android:process=":mc"
             android:screenOrientation="landscape"
             android:configChanges="orientation|screenSize|keyboard|keyboardHidden" />
 
         <activity
             android:name=".WlzControlEditorActivity"
             android:exported="false"
+            android:process=":mc"
             android:screenOrientation="portrait" />
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:screenOrientation="portrait"
-            android:noHistory="true">
+            android:screenOrientation="portrait">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
