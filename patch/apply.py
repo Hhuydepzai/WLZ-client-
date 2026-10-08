@@ -42,7 +42,7 @@ def prepare_pairip_stub():
     classes.mkdir(parents=True, exist_ok=True)
     subprocess.run(
         ["javac", "-source", "8", "-target", "8", "-cp", str(sdk),
-         "-d", str(classes), str(java)],
+         "-d", str(classes), str(pairip_java), str(mc_java)],
         check=True,
     )
     jar = APP / "pairip-stub.jar"
