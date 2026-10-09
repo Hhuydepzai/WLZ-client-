@@ -1,7 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="com.android.vending.CHECK_LICENSE" />
+    <uses-permission android:name="com.android.vending.BILLING" />
     <application
-        android:name=".WlzApplication"
+        android:name="com.wlz.client.WlzApplication"
         android:allowBackup="false"
         android:label="WLZ Client"
         android:supportsRtl="true"
@@ -9,11 +16,19 @@
         android:theme="@style/AppTheme">
 
         <activity
+            android:name="com.pairip.licensecheck.LicenseActivity"
+            android:exported="false" />
+
+        <activity
             android:name="com.mojang.minecraftpe.MainActivity"
             android:exported="true"
             android:process=":mc"
-            android:screenOrientation="landscape"
-            android:configChanges="orientation|screenSize|keyboard|keyboardHidden" />
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|orientation|screenLayout|uiMode|screenSize|smallestScreenSize|density|fontScale|layoutDirection|colorMode">
+            <meta-data
+                android:name="android.app.lib_name"
+                android:value="minecraftpe" />
+        </activity>
 
         <activity
             android:name=".WlzControlEditorActivity"
@@ -22,7 +37,7 @@
             android:screenOrientation="portrait" />
 
         <activity
-            android:name=".MainActivity"
+            android:name="com.wlz.client.MainActivity"
             android:exported="true"
             android:screenOrientation="portrait">
             <intent-filter>
