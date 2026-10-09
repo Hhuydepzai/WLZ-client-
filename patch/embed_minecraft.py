@@ -243,6 +243,18 @@ def inject(helper, base, out):
     # manifest that Gradle compiled from patch/AndroidManifest.xml instead.
     # It contains literal WLZ labeling and only system-resource references.
     out_entries = dict(base_entries)
+
+    # The source APK's v1 signature entries are invalid after replacing its
+    # manifest and adding WLZ DEX/native code. Remove them before the final
+    # apksigner step creates the new APK signature.
+    for name in list(out_entries):
+        upper = name.upper()
+        if upper.startswith("META-INF/") and (
+            upper == "META-INF/MANIFEST.MF"
+            or upper.endswith((".SF", ".RSA", ".DSA", ".EC"))
+        ):
+            del out_entries[name]
+
     out_entries["AndroidManifest.xml"] = helper_manifest
     existing = set(out_entries)
 
