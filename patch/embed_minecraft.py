@@ -128,28 +128,66 @@ def prune_duplicate_runtime_files(payload):
             shutil.rmtree(d, ignore_errors=True)
 
 
+def has_core(apk):
+    try:
+        with zipfile.ZipFile(apk) as z:
+            names = set(z.namelist())
+            return (
+                MC_SO in names
+                and any(re.fullmatch(r"classes[0-9]*\\.dex", n) for n in names)
+            )
+    except (OSError, zipfile.BadZipFile):
+        return False
+
+
+def validate_full_runtime(apk):
+    try:
+        with zipfile.ZipFile(apk) as z:
+            names = set(z.namelist())
+    except (OSError, zipfile.BadZipFile) as exc:
+        raise SystemExit(f"Source Minecraft APK is not a valid ZIP/APK: {exc}")
+
+    missing = []
+    if "AndroidManifest.xml" not in names:
+        missing.append("AndroidManifest.xml")
+    if "resources.arsc" not in names:
+        missing.append("resources.arsc")
+    if not any(n.startswith("assets/") for n in names):
+        missing.append("assets/*")
+    if MC_SO not in names:
+        missing.append(MC_SO)
+    if not any(re.fullmatch(r"classes[0-9]*\\.dex", n) for n in names):
+        missing.append("classes*.dex")
+
+    if missing:
+        raise SystemExit(
+            "Refusing to build a broken WLZ APK. The source APK is missing: "
+            + ", ".join(missing)
+            + ". The runtime-part ZIPs in the repository contain only DEX/native "
+              "libraries; they do not include Minecraft assets or resources.arsc. "
+              "Supply a complete, matching base Minecraft APK."
+        )
+
+
 def source_apk(payload):
     apks = sorted(payload.rglob("*.apk"))
     if apks:
         core = [p for p in apks if has_core(p)]
         if core:
             named = [p for p in core if p.name.lower() in {"base.apk", "minecraft.apk"}]
-            return max(named or core, key=lambda p: p.stat().st_size)
+            source = max(named or core, key=lambda p: p.stat().st_size)
+            validate_full_runtime(source)
+            return source
         raise SystemExit(
-            "Only split/config APKs found; no APK contains "
-            "lib/arm64-v8a/libminecraftpe.so."
+            "Only split/config APKs found; no single APK contains "
+            "the Minecraft native library and DEX. Supply a complete, matching base APK."
         )
 
-    if (
-        (payload / "AndroidManifest.xml").exists()
-        and list(payload.glob("classes*.dex"))
-        and (payload / MC_SO).exists()
-    ):
-        return payload / "__reconstructed_minecraft.apk"
-
     raise SystemExit(
-        "Runtime needs AndroidManifest.xml, classes*.dex and "
-        "lib/arm64-v8a/libminecraftpe.so."
+        "No full source APK found. The current AndroidManifest.xml + dex.zip + "
+        "arm64-v8a.zip + libminecraftpe.so bundle is incomplete; it has no assets/ "
+        "or resources.arsc and produces a gray-screen/crashing game. Add a complete "
+        "base APK to the build input. WLZ will not package the incomplete runtime."
     )
 
 
@@ -187,6 +225,11 @@ def write_zip(entries, out):
 
 
 def inject(helper, base, out):
+    # Never emit a standalone installable-looking APK from a runtime parts set.
+    # A full source APK is required because Minecraft resources and file assets
+    # are not reconstructable from its DEX and shared libraries alone.
+    validate_full_runtime(base)
+
     base_entries = read_zip(base)
     helper_entries = read_zip(helper)
 
