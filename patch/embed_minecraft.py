@@ -186,143 +186,61 @@ def write_zip(entries, out):
             z.writestr(out_info, data, compress_type=compress)
 
 
-def patch_manifest_axml(data):
-    b = bytearray(data)
-    if len(b) < 16:
-        raise SystemExit("Manifest too small")
-
-    # Binary XML string-pool patch. Keep the original Minecraft manifest,
-    # only change its Application class and visible label. This avoids
-    # deleting Minecraft metadata/providers like the earlier helper-manifest
-    # replacement did.
-    def u32(o): return int.from_bytes(b[o:o+4], "little")
-    def put_u32(o,v): b[o:o+4] = int(v).to_bytes(4,"little")
-    def read_uleb(o):
-        value=0; shift=0
-        while True:
-            x=b[o]; o+=1
-            value |= (x & 0x7f) << shift
-            if x < 0x80: return value,o
-            shift += 7
-
-    # String pool is normally the first child chunk at offset 8.
-    sp = 8
-    typ = int.from_bytes(b[sp:sp+2],"little")
-    if typ != 0x0001:
-        raise SystemExit("Manifest string pool not found")
-    sp_size = u32(sp+4)
-    count = u32(sp+8)
-    flags = u32(sp+16)
-    strings_start = u32(sp+20)
-    if not (flags & 0x100):
-        raise SystemExit("Manifest string pool is not UTF-8")
-
-    offsets = [u32(sp+28+4*i) for i in range(count)]
-    base = sp + strings_start
-
-    def get_utf8(idx):
-        pos = base + offsets[idx]
-        utf16_len,pos2 = read_uleb(pos)
-        byte_len,pos3 = read_uleb(pos2)
-        raw = bytes(b[pos3:pos3+byte_len])
-        return pos, pos2, pos3, byte_len, raw.decode("utf-8","replace")
-
-    def replace_same_slot(idx, new_text):
-        pos, p2, p3, old_len, old_text = get_utf8(idx)
-        raw = new_text.encode("utf-8")
-        if len(raw) > old_len:
-            return False
-        # Manifest string lengths used here are <128, so one-byte ULEB.
-        b[p2] = len(new_text)
-        b[p3-1] = len(raw)
-        payload_end = p3 + old_len + 1
-        b[p3:p3+len(raw)] = raw
-        b[p3+len(raw)] = 0
-        for j in range(p3+len(raw)+1, payload_end):
-            b[j] = 0
-        return True
-
-    def find_text(text):
-        for i in range(count):
-            try:
-                if get_utf8(i)[4] == text:
-                    return i
-            except Exception:
-                pass
-        return -1
-
-    app_idx=-1
-    for i in range(count):
-        try:
-            s=get_utf8(i)[4]
-            if s.endswith("MinecraftApplication"):
-                app_idx=i; break
-        except Exception:
-            continue
-    if app_idx < 0:
-        raise SystemExit("Original Minecraft Application class not found in manifest")
-    if not replace_same_slot(app_idx,"com.wlz.client.WlzApplication"):
-        raise SystemExit("WLZ Application class does not fit manifest string slot")
-
-    # Grow the exact label string by one byte: Minecraft -> WLZ Client.
-    label_idx=find_text("Minecraft")
-    if label_idx >= 0:
-        old_rel=offsets[label_idx]
-        _,_,_,old_len,_=get_utf8(label_idx)
-        raw=b"WLZ Client"
-        if len(raw)==old_len:
-            replace_same_slot(label_idx,"WLZ Client")
-        elif len(raw)==old_len+1:
-            insert_at=base+old_rel+2+old_len+1
-            b[insert_at:insert_at]=b"\x00"
-            for j in range(label_idx+1,count):
-                put_u32(sp+28+4*j,u32(sp+28+4*j)+1)
-            # Refresh header sizes and pool length.
-            put_u32(sp+4,sp_size+1)
-            put_u32(4,u32(4)+1)
-            # Refresh this string slot after insertion.
-            offsets2=[u32(sp+28+4*i) for i in range(count)]
-            pbase=sp+strings_start
-            p=pbase+offsets2[label_idx]
-            b[p]=len("WLZ Client")
-            b[p+1]=len(raw)
-            b[p+2:p+2+len(raw)]=raw
-            b[p+2+len(raw)]=0
-
-    return bytes(b)
-
 def inject(helper, base, out):
-    # IMPORTANT: keep the newest Minecraft runtime manifest intact.
     base_entries = read_zip(base)
     helper_entries = read_zip(helper)
 
-    patched_manifest = patch_manifest_axml(base_entries["AndroidManifest.xml"][1])
+    helper_manifest = helper_entries.get("AndroidManifest.xml")
+    if helper_manifest is None:
+        raise SystemExit("WLZ helper APK has no compiled AndroidManifest.xml")
+
+    # The old build ran ManifestEditor against the reconstructed Minecraft
+    # manifest, which left resource-table references behind even though the
+    # reconstructed package did not contain resources.arsc. Use the helper
+    # manifest that Gradle compiled from patch/AndroidManifest.xml instead.
+    # It contains literal WLZ labeling and only system-resource references.
     out_entries = dict(base_entries)
-    out_entries["AndroidManifest.xml"] = (base_entries["AndroidManifest.xml"][0], patched_manifest)
-
-    # Add only WLZ DEX. Do not replace Minecraft resources.arsc/res/ or the
-    # original manifest. This preserves the runtime that Minecraft expects.
+    out_entries["AndroidManifest.xml"] = helper_manifest
     existing = set(out_entries)
-    helper_dex = [n for n in helper_entries
-                  if re.fullmatch(r"classes[0-9]*\.dex", Path(n).name)]
-    for name in sorted(helper_dex, key=lambda x:(0 if Path(x).name=="classes.dex" else 1,x)):
-        nums=[]
-        for n in existing:
-            m=re.fullmatch(r"classes([0-9]*)\.dex", Path(n).name)
-            if m: nums.append(1 if not m.group(1) else int(m.group(1)))
-        next_num=max(nums or [1])+1
-        dest="classes.dex" if next_num==1 else f"classes{next_num}.dex"
-        out_entries[dest]=helper_entries[name]
-        existing.add(dest)
 
-    # Only take WLZ native helper library if it does not collide with the
-    # original Minecraft libraries.
-    for name,entry in helper_entries.items():
-        if name.startswith("lib/arm64-v8a/") and name.endswith(".so") and name not in existing:
-            out_entries[name]=entry
+    # Keep the newest WLZ code/features unchanged, but also package the
+    # compiled WLZ resources. The helper resource bundle contains the WLZ
+    # v0.6.4 icon/splash and its resource table. The previous build dropped
+    # these entries, so the APK installed with a generic Android icon.
+    if "resources.arsc" in helper_entries:
+        out_entries["resources.arsc"] = helper_entries["resources.arsc"]
+        existing.add("resources.arsc")
+    for name, entry in helper_entries.items():
+        if name.startswith("res/"):
+            out_entries[name] = entry
             existing.add(name)
 
-    write_zip(out_entries,out)
+    helper_dex = [
+        n
+        for n in helper_entries
+        if re.fullmatch(r"classes[0-9]*\.dex", Path(n).name)
+    ]
+    for name in sorted(
+        helper_dex,
+        key=lambda x: (0 if Path(x).name == "classes.dex" else 1, x),
+    ):
+        nums = []
+        for n in existing:
+            m = re.fullmatch(r"classes([0-9]*)\.dex", Path(n).name)
+            if m:
+                nums.append(1 if not m.group(1) else int(m.group(1)))
+        next_num = max(nums or [1]) + 1
+        dest = "classes.dex" if next_num == 1 else f"classes{next_num}.dex"
+        out_entries[dest] = helper_entries[name]
+        existing.add(dest)
+
+    for name, entry in helper_entries.items():
+        if name.startswith("lib/arm64-v8a/") and name.endswith(".so"):
+            if name not in existing:
+                out_entries[name] = entry
+                existing.add(name)
+
+    write_zip(out_entries, out)
 
 
 def main():
