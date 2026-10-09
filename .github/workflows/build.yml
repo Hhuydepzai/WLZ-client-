@@ -173,10 +173,14 @@ jobs:
 
           "${APKSIGNER}" verify --verbose dist/WLZ-Minecraft.apk
 
-          # Verify the final package is WLZ, not com.mojang.minecraftpe.
+          # Verify independent package identity and full game payload.
           AAPT2="${ANDROID_HOME}/build-tools/${BT}/aapt2"
           BADGING="$("${AAPT2}" dump badging dist/WLZ-Minecraft.apk)"
-          printf '%s\n' "$BADGING" | grep -q "package: name='com.wlz.client.launcher'"
+          printf '%s\\n' "$BADGING" | grep -q "package: name='com.wlz.client.launcher'"
+          unzip -tq dist/WLZ-Minecraft.apk
+          unzip -Z1 dist/WLZ-Minecraft.apk | grep -q '^assets/'
+          unzip -Z1 dist/WLZ-Minecraft.apk | grep -qx 'resources.arsc'
+          unzip -Z1 dist/WLZ-Minecraft.apk | grep -qx 'lib/arm64-v8a/libminecraftpe.so'
           test -s dist/WLZ-Minecraft.apk
 
       - name: Show artifacts
