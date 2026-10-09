@@ -312,7 +312,7 @@ def _build_string_pool(strings, flags):
     size = strings_start + len(data)
     chunk = bytearray(struct.pack(
         "<HHIIIIII", 0x0001, header_size, size, len(strings), 0,
-        flags & ~0x100 if False else flags, strings_start, 0
+        flags, strings_start, 0
     ))
     for offset in offsets:
         chunk += struct.pack("<I", offset)
