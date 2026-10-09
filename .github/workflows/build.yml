@@ -22,6 +22,9 @@ jobs:
         with:
           lfs: true
 
+      - name: Validate build scripts
+        run: python3 -m py_compile patch/apply.py patch/embed_minecraft.py
+
       - name: Setup Java
         uses: actions/setup-java@v5
         with:
