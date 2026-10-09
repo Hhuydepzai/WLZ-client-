@@ -5,11 +5,11 @@ android {
     compileSdk 35
 
     defaultConfig {
-        applicationId 'com.wlz.client.launcher'
+        applicationId 'com.wlzclient.launcher'
         minSdk 28
         targetSdk 35
-        versionCode 231
-        versionName '2.3.1'
+        versionCode 232
+        versionName '2.3.2'
 
         ndk { abiFilters 'arm64-v8a' }
 
@@ -41,8 +41,8 @@ android {
     }
 
     dependencies {
-        // Compile-only stub for Minecraft's existing PairIP Application superclass.
-        // The real class comes from the embedded Minecraft dex files.
-        compileOnly files('pairip-stub.jar')
+        // Compile-only stub for Apollon's existing MinecraftApplication superclass.
+        // The real class comes from the original Apollon base DEX.
+        compileOnly files('minecraft-application-stub.jar')
     }
 }
