@@ -5,7 +5,7 @@ android {
     compileSdk 35
 
     defaultConfig {
-        applicationId 'com.wlz.client230'
+        applicationId 'com.mojang.minecraftpe'
         minSdk 28
         targetSdk 35
         versionCode 230
