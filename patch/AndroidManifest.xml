@@ -15,10 +15,9 @@
         android:name="com.wlz.client.WlzApplication"
         android:allowBackup="false"
         android:label="WLZ Client"
-        android:icon="@drawable/wlz_icon"
         android:supportsRtl="true"
         android:extractNativeLibs="true"
-        android:theme="@style/AppTheme">
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
         <activity
             android:name="com.pairip.licensecheck.LicenseActivity"
