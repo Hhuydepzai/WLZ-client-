@@ -134,7 +134,7 @@ def has_core(apk):
             names = set(z.namelist())
             return (
                 MC_SO in names
-                and any(re.fullmatch(r"classes[0-9]*\\.dex", n) for n in names)
+                and any(re.fullmatch(r"classes[0-9]*\.dex", n) for n in names)
             )
     except (OSError, zipfile.BadZipFile):
         return False
@@ -156,7 +156,7 @@ def validate_full_runtime(apk):
         missing.append("assets/*")
     if MC_SO not in names:
         missing.append(MC_SO)
-    if not any(re.fullmatch(r"classes[0-9]*\\.dex", n) for n in names):
+    if not any(re.fullmatch(r"classes[0-9]*\.dex", n) for n in names):
         missing.append("classes*.dex")
 
     if missing:
