@@ -23,3 +23,10 @@ The embed step preserves the source APK's assets and resource table, inserts the
 ## Build status
 
 The complete source APK must be attached to the runtime Release for the final build to succeed. Until it is present, CI intentionally exits with an explanatory error instead of publishing an APK known to be incomplete.
+
+
+## Packaging/runtime fix
+
+The packager now patches the original base APK's binary manifest instead of replacing it with the helper manifest. This preserves the source Minecraft permissions, providers, metadata, resource IDs, asset bundle and native bootstrap declarations. WLZ uses the separate package ID `com.wlzclient.launcher`; original provider authorities are remapped while component class names remain unchanged. The WLZ launcher is registered as the launcher entry and the original Minecraft activity keeps its remaining intent filters.
+
+The Application extension is compiled against a compile-only stub for `com.zihao_il.MinecraftApplication`, which exists in the supplied Apollon V6.6 base DEX. The stub is not packaged in the final APK.
