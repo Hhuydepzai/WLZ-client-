@@ -1,141 +1,580 @@
 package com.wlz.client;
 
 import android.app.Activity;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
+import android.view.Choreographer;
+import android.view.Display;
 import android.view.Gravity;
+import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
+import android.view.Window;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Switch;
 import android.widget.TextView;
-import android.widget.Toast;
+
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
+import java.util.HashMap;
+import java.util.Map;
 
 public final class WlzInGameHud {
-    private static final int ORANGE = Color.rgb(255,112,0);
-    private static final int BG = Color.rgb(14,16,20);
-    private static final int STROKE = Color.rgb(54,60,72);
-    private static final int TEXT = Color.rgb(245,247,250);
-    private static final int MUTED = Color.rgb(150,158,170);
+    private static final Map<Activity, WlzInGameHud> ACTIVE = new HashMap<Activity, WlzInGameHud>();
+
+    private static final int ORANGE = Color.rgb(255, 112, 0);
+    private static final int ORANGE_LIGHT = Color.rgb(255, 171, 76);
+    private static final int BG = Color.rgb(9, 10, 13);
+    private static final int ROW = Color.rgb(22, 24, 29);
+    private static final int STROKE = Color.rgb(55, 59, 67);
+    private static final int TEXT = Color.WHITE;
+    private static final int MUTED = Color.rgb(155, 160, 170);
 
     private static final String[] NAMES = {
-        "Zoom","FreeLook","Ném đồ","Unlock FPS","Fullbright","Hitbox","AutoSprint","Snaplook","FPS Counter"
+            "Zoom", "FreeLook", "Ném đồ", "Unlock FPS", "Fullbright",
+            "Hitbox", "AutoSprint", "Snaplook", "FPS Counter"
     };
 
-    private static final java.util.WeakHashMap<Activity, FrameLayout> ROOTS =
-        new java.util.WeakHashMap<>();
+    private final Activity activity;
+    private final FrameLayout decor;
+    private final FrameLayout layer;
+    private final WlzLogoView circle;
 
-    private WlzInGameHud() {}
+    private TextView fpsText;
+    private FrameLayout radialMenu;
+    private LinearLayout keyMapperPanel;
+    private boolean radialVisible;
+    private int captureAction = -1;
 
-    public static void attach(Activity a) {
-        if (a == null || ROOTS.containsKey(a)) return;
-        FrameLayout content = a.findViewById(android.R.id.content);
-        if (content == null) return;
+    private Window.Callback originalCallback;
+    private Window.Callback callbackProxy;
 
-        FrameLayout hud = new FrameLayout(a);
-        hud.setTag(R.id.wlz_hud);
+    private long frameWindowStart = System.nanoTime();
+    private int frameCount;
 
-        Button circle = new Button(a);
-        circle.setText("WLZ");
-        circle.setTextColor(Color.WHITE);
-        circle.setTextSize(10);
-        circle.setAllCaps(false);
-        circle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        circle.setBackground(circleBg());
-        circle.setOnClickListener(v -> showPanel(a, content));
+    private WlzInGameHud(Activity activity) {
+        this.activity = activity;
+        this.decor = (FrameLayout) activity.getWindow().getDecorView();
+        this.layer = new FrameLayout(activity);
+        layer.setClipChildren(false);
+        layer.setClipToPadding(false);
+        decor.addView(layer, new FrameLayout.LayoutParams(-1, -1));
 
-        FrameLayout.LayoutParams cp = new FrameLayout.LayoutParams(dp(a,64),dp(a,64));
-        cp.gravity = Gravity.RIGHT | Gravity.CENTER_VERTICAL;
-        cp.rightMargin = dp(a,14);
-        cp.topMargin = dp(a,18);
-        hud.addView(circle, cp);
+        circle = makeCircle();
+        FrameLayout.LayoutParams cp = new FrameLayout.LayoutParams(dp(68), dp(68));
+        cp.leftMargin = prefs().getInt("hud_x", dp(14));
+        cp.topMargin = prefs().getInt("hud_y", dp(120));
+        layer.addView(circle, cp);
+        makeDraggable(circle, cp);
 
-        content.addView(hud, new FrameLayout.LayoutParams(-1,-1));
-        ROOTS.put(a, hud);
+        if (WlzKeyMapper.areHotkeysEnabled(activity)) installKeyHook();
+        applyVisuals();
     }
 
-    public static void detach(Activity a) {
-        FrameLayout hud = ROOTS.remove(a);
-        if (hud == null) return;
+    public static void attach(Activity activity) {
+        if (activity == null) return;
+        if (!"com.mojang.minecraftpe.MainActivity".equals(activity.getClass().getName())) return;
+
+        activity.runOnUiThread(() -> {
+            if (!ACTIVE.containsKey(activity)) {
+                ACTIVE.put(activity, new WlzInGameHud(activity));
+            }
+        });
+    }
+
+    public static void detach(Activity activity) {
+        WlzInGameHud hud = ACTIVE.remove(activity);
+        if (hud != null) hud.close();
+    }
+
+    public static void refreshAllHotkeys() {
+        for (WlzInGameHud hud : ACTIVE.values()) {
+            if (WlzKeyMapper.areHotkeysEnabled(hud.activity)) {
+                hud.installKeyHook();
+            } else {
+                hud.restoreKeyHook();
+            }
+        }
+    }
+
+    private void installKeyHook() {
         try {
-            View parent = hud.getParent();
-            if (parent instanceof android.view.ViewGroup) ((android.view.ViewGroup)parent).removeView(hud);
-        } catch (Throwable ignored) {}
+            Window window = activity.getWindow();
+            if (callbackProxy != null && window.getCallback() == callbackProxy) return;
+
+            originalCallback = window.getCallback();
+            if (originalCallback == null) return;
+
+            callbackProxy = (Window.Callback) Proxy.newProxyInstance(
+                    Window.Callback.class.getClassLoader(),
+                    new Class<?>[]{Window.Callback.class},
+                    new InvocationHandler() {
+                        @Override
+                        public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+                            if ("dispatchKeyEvent".equals(method.getName())
+                                    && args != null
+                                    && args.length == 1
+                                    && args[0] instanceof KeyEvent) {
+                                KeyEvent event = (KeyEvent) args[0];
+                                if (event.getAction() == KeyEvent.ACTION_DOWN
+                                        && !event.isLongPress()) {
+                                    if (captureAction >= 0) {
+                                        int key = event.getKeyCode();
+                                        WlzKeyMapper.setKey(activity, captureAction, key);
+                                        captureAction = -1;
+                                        rebuildKeyMapper();
+                                        if (!WlzKeyMapper.areHotkeysEnabled(activity)) {
+                                            restoreKeyHook();
+                                        }
+                                        return true;
+                                    }
+                                    if (WlzKeyMapper.trigger(activity, event.getKeyCode())) {
+                                        applyVisuals();
+                                        return true;
+                                    }
+                                }
+                            }
+                            return method.invoke(originalCallback, args);
+                        }
+                    });
+
+            window.setCallback(callbackProxy);
+        } catch (Throwable ignored) {
+            callbackProxy = null;
+        }
     }
 
-    private static void showPanel(Activity a, FrameLayout content) {
-        final FrameLayout panel = new FrameLayout(a);
-        panel.setBackgroundColor(0x66000000);
+    private void restoreKeyHook() {
+        try {
+            Window window = activity.getWindow();
+            if (callbackProxy != null && window.getCallback() == callbackProxy) {
+                window.setCallback(originalCallback);
+            }
+        } catch (Throwable ignored) {
+        }
+        callbackProxy = null;
+    }
 
-        LinearLayout card = new LinearLayout(a);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(a,10),dp(a,10),dp(a,10),dp(a,10));
-        card.setBackground(round(BG,ORANGE,2,18));
+    private WlzLogoView makeCircle() {
+        WlzLogoView b = new WlzLogoView(activity);
+        b.setCompactCircle(true);
+        b.setContentDescription("WLZ ClickGUI");
+        b.setClickable(true);
+        return b;
+    }
 
-        LinearLayout head = new LinearLayout(a);
+    private void toggleRadialMenu() {
+        if (radialVisible) {
+            closeRadialMenu();
+        } else {
+            openRadialMenu();
+        }
+    }
+
+    private void openRadialMenu() {
+        closeRadialMenu();
+        radialVisible = true;
+
+        final int size = dp(250);
+        radialMenu = new FrameLayout(activity);
+        radialMenu.setBackground(circleBackground());
+
+        FrameLayout.LayoutParams cp = (FrameLayout.LayoutParams) circle.getLayoutParams();
+        int cx = cp.leftMargin + circle.getWidth() / 2;
+        int cy = cp.topMargin + circle.getHeight() / 2;
+
+        FrameLayout.LayoutParams rp = new FrameLayout.LayoutParams(size, size);
+        rp.leftMargin = Math.max(0, Math.min(cx - size / 2, Math.max(0, decor.getWidth() - size)));
+        rp.topMargin = Math.max(0, Math.min(cy - size / 2, Math.max(0, decor.getHeight() - size)));
+
+        layer.addView(radialMenu, 0, rp);
+
+        addRadialButton("ZOOM", 0, size / 2, dp(17), () -> toggleModule(0));
+        addRadialButton("LOOK", 1, size - dp(42), size / 2 - dp(21), () -> toggleModule(1));
+        addRadialButton("FPS", 3, size / 2 - dp(29), size - dp(54), () -> toggleModule(3));
+        addRadialButton("BRIGHT", 4, dp(13), size / 2 - dp(24), () -> toggleModule(4));
+        addRadialButton("MAP PHÍM", -2, size / 2 - dp(42), size - dp(91), this::openKeyMapper);
+        addRadialButton(hotkeyLabel(), -3, dp(29), dp(24), this::toggleHotkeys);
+
+        WlzLogoView center = makeCircle();
+        center.setCompactCircle(true);
+        FrameLayout.LayoutParams centerLp = new FrameLayout.LayoutParams(dp(70), dp(70));
+        centerLp.gravity = Gravity.CENTER;
+        radialMenu.addView(center, centerLp);
+
+        circle.bringToFront();
+        center.setOnClickListener(v -> closeRadialMenu());
+    }
+
+    private void addRadialButton(String label, int action, int left, int top, final Runnable click) {
+        Button b = button(label);
+        b.setTextSize(action == -2 ? 8 : 8.5f);
+        b.setBackground(circleButtonBackground());
+        b.setOnClickListener(v -> {
+            click.run();
+            if (action >= 0) {
+                refreshRadialLabels();
+            }
+        });
+
+        FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(dp(84), dp(44));
+        p.leftMargin = left;
+        p.topMargin = top;
+        radialMenu.addView(b, p);
+    }
+
+    private void refreshRadialLabels() {
+        if (radialMenu == null) return;
+        for (int i = 0; i < radialMenu.getChildCount(); i++) {
+            View v = radialMenu.getChildAt(i);
+            if (!(v instanceof Button)) continue;
+            Button b = (Button) v;
+            String label = b.getText().toString();
+            if ("ZOOM".equals(label)) b.setText(moduleLabel("ZOOM", 0));
+            else if ("LOOK".equals(label)) b.setText(moduleLabel("LOOK", 1));
+            else if ("FPS".equals(label)) b.setText(moduleLabel("FPS", 3));
+            else if ("BRIGHT".equals(label)) b.setText(moduleLabel("BRIGHT", 4));
+            else if (label.startsWith("HOTKEY")) b.setText(hotkeyLabel());
+        }
+    }
+
+    private String moduleLabel(String name, int index) {
+        return WlzModuleManager.isModuleEnabled(activity, index) ? name + " ✓" : name;
+    }
+
+    private String hotkeyLabel() {
+        return WlzKeyMapper.areHotkeysEnabled(activity) ? "HOTKEY ✓" : "HOTKEY";
+    }
+
+    private void toggleModule(int index) {
+        boolean enabled = WlzModuleManager.isModuleEnabled(activity, index);
+        WlzModuleManager.setModuleEnabled(activity, index, !enabled);
+        applyVisuals();
+        if (radialMenu != null) refreshRadialLabels();
+    }
+
+    private void toggleHotkeys() {
+        boolean enabled = WlzKeyMapper.areHotkeysEnabled(activity);
+        WlzKeyMapper.setHotkeysEnabled(activity, !enabled);
+        if (radialMenu != null) refreshRadialLabels();
+    }
+
+    private void openKeyMapper() {
+        closeRadialMenu();
+        showKeyMapper();
+    }
+
+    private void showKeyMapper() {
+        closeKeyMapper();
+        keyMapperPanel = new LinearLayout(activity);
+        keyMapperPanel.setOrientation(LinearLayout.VERTICAL);
+        keyMapperPanel.setPadding(dp(14), dp(14), dp(14), dp(14));
+        keyMapperPanel.setBackground(round(Color.WHITE, ORANGE, 2, 20));
+
+        LinearLayout head = new LinearLayout(activity);
         head.setGravity(Gravity.CENTER_VERTICAL);
-        TextView title = text(a,"WLZ  CLICKGUI",16,ORANGE,true);
-        head.addView(title,new LinearLayout.LayoutParams(0,dp(a,44),1));
-        Button close = button(a,"ĐÓNG");
-        head.addView(close,new LinearLayout.LayoutParams(dp(a,80),dp(a,44)));
-        card.addView(head);
+        TextView title = text("WLZ • MAP PHÍM", 16, ORANGE, true);
+        head.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
 
-        ScrollView scroll = new ScrollView(a);
-        LinearLayout list = new LinearLayout(a);
+        Button hotkey = button(WlzKeyMapper.areHotkeysEnabled(activity)
+                ? "HOTKEY: BẬT" : "HOTKEY: TẮT");
+        hotkey.setTextColor(ORANGE);
+        hotkey.setOnClickListener(v -> {
+            WlzKeyMapper.setHotkeysEnabled(activity,
+                    !WlzKeyMapper.areHotkeysEnabled(activity));
+            hotkey.setText(WlzKeyMapper.areHotkeysEnabled(activity)
+                    ? "HOTKEY: BẬT" : "HOTKEY: TẮT");
+            if (WlzKeyMapper.areHotkeysEnabled(activity)) installKeyHook();
+            else if (captureAction < 0) restoreKeyHook();
+        });
+        head.addView(hotkey, lp(dp(116), dp(42)));
+
+        Button close = button("X");
+        close.setTextColor(ORANGE);
+        close.setOnClickListener(v -> closeKeyMapper());
+        head.addView(close, lp(dp(46), dp(42)));
+        keyMapperPanel.addView(head);
+
+        TextView info = text("Chọn MAP rồi bấm phím OTG để gán.", 9, MUTED, false);
+        keyMapperPanel.addView(info, top(7));
+
+        LinearLayout list = new LinearLayout(activity);
         list.setOrientation(LinearLayout.VERTICAL);
 
-        for (int i=0;i<NAMES.length;i++) {
-            final int idx=i;
-            LinearLayout row=new LinearLayout(a);
+        for (int i = 0; i < NAMES.length; i++) {
+            final int action = i;
+            LinearLayout row = new LinearLayout(activity);
             row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(dp(a,7),dp(a,3),dp(a,4),dp(a,3));
-            row.setBackground(round(Color.rgb(19,22,28),STROKE,1,10));
-            TextView n=text(a,NAMES[i],11,TEXT,true);
-            row.addView(n,new LinearLayout.LayoutParams(0,dp(a,48),1));
-            Switch sw=new Switch(a);
-            sw.setChecked(WlzModuleManager.isModuleEnabled(a,idx));
-            sw.setOnCheckedChangeListener((b,on)->WlzModuleManager.setModuleEnabled(a,idx,on));
-            row.addView(sw,new LinearLayout.LayoutParams(-2,dp(a,48)));
-            LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(-1,dp(a,54));
-            rp.bottomMargin=dp(a,5);
-            list.addView(row,rp);
+            row.setPadding(dp(8), dp(5), dp(8), dp(5));
+            row.setBackground(round(Color.rgb(247,247,249),
+                    Color.rgb(225,225,229), 1, 12));
+
+            row.addView(text(NAMES[i], 10, Color.rgb(35,35,38), true),
+                    new LinearLayout.LayoutParams(0, dp(46), 1));
+
+            Button key = button(WlzKeyMapper.keyName(
+                    WlzKeyMapper.getKey(activity, action)));
+            key.setTextColor(ORANGE);
+            key.setOnClickListener(v -> {
+                captureAction = action;
+                if (!WlzKeyMapper.areHotkeysEnabled(activity)) {
+                    installKeyHook();
+                }
+                rebuildKeyMapper();
+            });
+            row.addView(key, lp(dp(90), dp(42)));
+
+            LinearLayout.LayoutParams rp = lp(-1, dp(51));
+            rp.bottomMargin = dp(5);
+            list.addView(row, rp);
         }
 
-        Button keymap=button(a,"MAP PHÍM / HOTKEY");
-        keymap.setOnClickListener(v->Toast.makeText(a,"Dùng WlzKeyMapper để lưu hotkey trong cấu hình WLZ.",Toast.LENGTH_SHORT).show());
-        list.addView(keymap,top(a,6));
-
+        ScrollView scroll = new ScrollView(activity);
         scroll.addView(list);
-        card.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        keyMapperPanel.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
-        close.setOnClickListener(v->content.removeView(panel));
-
-        panel.addView(card,centerPanel(a));
-        content.addView(panel,new FrameLayout.LayoutParams(-1,-1));
+        FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(
+                Math.min(dp(360), Math.max(dp(300), decor.getWidth() - dp(20))),
+                Math.min(dp(520), Math.max(dp(360), decor.getHeight() - dp(40))));
+        pp.gravity = Gravity.CENTER;
+        layer.addView(keyMapperPanel, pp);
     }
 
-    private static Button button(Activity a,String s){
-        Button b=new Button(a); b.setText(s); b.setTextColor(TEXT); b.setTextSize(10); b.setAllCaps(false);
-        b.setTypeface(Typeface.DEFAULT,Typeface.BOLD); b.setBackground(round(Color.rgb(20,23,29),STROKE,1,10)); return b;
+    private void rebuildKeyMapper() {
+        showKeyMapper();
     }
-    private static TextView text(Activity a,String s,float size,int color,boolean bold){
-        TextView t=new TextView(a); t.setText(s); t.setTextSize(size); t.setTextColor(color);
-        if(bold)t.setTypeface(Typeface.DEFAULT,Typeface.BOLD); return t;
+
+    private void closeKeyMapper() {
+        if (keyMapperPanel != null) {
+            layer.removeView(keyMapperPanel);
+            keyMapperPanel = null;
+        }
+        captureAction = -1;
+        if (!WlzKeyMapper.areHotkeysEnabled(activity)) restoreKeyHook();
     }
-    private static GradientDrawable circleBg(){
-        GradientDrawable d=new GradientDrawable(); d.setShape(GradientDrawable.OVAL); d.setColor(ORANGE); d.setStroke(2,Color.WHITE); return d;
+
+    private void closeRadialMenu() {
+        if (radialMenu != null) {
+            layer.removeView(radialMenu);
+            radialMenu = null;
+        }
+        radialVisible = false;
     }
-    private static GradientDrawable round(int fill,int stroke,int width,int radius){
-        GradientDrawable d=new GradientDrawable(); d.setColor(fill); d.setCornerRadius(radius); d.setStroke(width,stroke); return d;
+
+    private GradientDrawable circleBackground() {
+        GradientDrawable d = new GradientDrawable();
+        d.setShape(GradientDrawable.OVAL);
+        d.setColor(Color.argb(235, 11, 12, 15));
+        d.setStroke(dp(2), ORANGE);
+        return d;
     }
-    private static FrameLayout.LayoutParams centerPanel(Activity a){
-        FrameLayout.LayoutParams p=new FrameLayout.LayoutParams(dp(a,330),dp(a,540)); p.gravity=Gravity.CENTER; return p;
+
+    private GradientDrawable circleButtonBackground() {
+        GradientDrawable d = new GradientDrawable();
+        d.setShape(GradientDrawable.OVAL);
+        d.setColor(Color.argb(220, 24, 25, 29));
+        d.setStroke(dp(1), ORANGE);
+        return d;
     }
-    private static LinearLayout.LayoutParams top(Activity a,int m){
-        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2); p.topMargin=dp(a,m); return p;
+
+    private void makeDraggable(View v, final FrameLayout.LayoutParams p) {
+        v.setOnTouchListener(new View.OnTouchListener() {
+            float downX;
+            float downY;
+            int startX;
+            int startY;
+            boolean moved;
+
+            @Override
+            public boolean onTouch(View view, MotionEvent e) {
+                if (e.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                    if (radialVisible) closeRadialMenu();
+                    downX = e.getRawX();
+                    downY = e.getRawY();
+                    startX = p.leftMargin;
+                    startY = p.topMargin;
+                    moved = false;
+                    return true;
+                }
+
+                if (e.getActionMasked() == MotionEvent.ACTION_MOVE) {
+                    int nx = startX + (int) (e.getRawX() - downX);
+                    int ny = startY + (int) (e.getRawY() - downY);
+                    p.leftMargin = Math.max(0, Math.min(nx, decor.getWidth() - view.getWidth()));
+                    p.topMargin = Math.max(0, Math.min(ny, decor.getHeight() - view.getHeight()));
+                    view.setLayoutParams(p);
+                    prefs().edit().putInt("hud_x", p.leftMargin).putInt("hud_y", p.topMargin).apply();
+                    moved = true;
+                    return true;
+                }
+
+                if (e.getActionMasked() == MotionEvent.ACTION_UP) {
+                    if (!moved) toggleRadialMenu();
+                    return true;
+                }
+                return true;
+            }
+        });
     }
-    private static int dp(Activity a,int v){return Math.round(v*a.getResources().getDisplayMetrics().density);}
+
+    private void applyVisuals() {
+        applyUnlockFps();
+        if (WlzModuleManager.isModuleEnabled(activity, 8)) startFps();
+        else stopFps();
+    }
+
+    private void applyUnlockFps() {
+        if (!WlzModuleManager.isModuleEnabled(activity, 3)) return;
+
+        try {
+            Window window = activity.getWindow();
+            WindowManager.LayoutParams lp = window.getAttributes();
+
+            if (Build.VERSION.SDK_INT >= 23) {
+                Display display = activity.getWindowManager().getDefaultDisplay();
+                if (display != null) {
+                    if (Build.VERSION.SDK_INT >= 30) {
+                        Display.Mode best = null;
+                        for (Display.Mode mode : display.getSupportedModes()) {
+                            if (best == null || mode.getRefreshRate() > best.getRefreshRate()) {
+                                best = mode;
+                            }
+                        }
+                        if (best != null) lp.preferredDisplayModeId = best.getModeId();
+                    }
+                    lp.preferredRefreshRate = Math.max(lp.preferredRefreshRate, maxRefreshRate(display));
+                    window.setAttributes(lp);
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private float maxRefreshRate(Display display) {
+        float max = 60f;
+        if (Build.VERSION.SDK_INT >= 23) {
+            for (Display.Mode mode : display.getSupportedModes()) {
+                max = Math.max(max, mode.getRefreshRate());
+            }
+        }
+        try {
+            max = Math.max(max, display.getRefreshRate());
+        } catch (Throwable ignored) {
+        }
+        return max;
+    }
+
+    private final Choreographer.FrameCallback frameCallback = new Choreographer.FrameCallback() {
+        @Override
+        public void doFrame(long frameTimeNanos) {
+            frameCount++;
+            long now = System.nanoTime();
+            if (now - frameWindowStart >= 1_000_000_000L) {
+                final int fps = frameCount;
+                frameCount = 0;
+                frameWindowStart = now;
+                if (fpsText != null) {
+                    activity.runOnUiThread(() -> fpsText.setText("FPS " + fps));
+                }
+            }
+            Choreographer.getInstance().postFrameCallback(this);
+        }
+    };
+
+    private void startFps() {
+        if (fpsText != null) return;
+
+        fpsText = text("FPS 0", 10, TEXT, true);
+        fpsText.setBackground(round(Color.argb(170, 10, 12, 16), ORANGE, 1, 9));
+        fpsText.setPadding(dp(7), dp(5), dp(7), dp(5));
+
+        FrameLayout.LayoutParams fp = new FrameLayout.LayoutParams(-2, -2);
+        fp.leftMargin = dp(14);
+        fp.topMargin = dp(244);
+        layer.addView(fpsText, fp);
+
+        frameCount = 0;
+        frameWindowStart = System.nanoTime();
+        Choreographer.getInstance().postFrameCallback(frameCallback);
+    }
+
+    private void stopFps() {
+        if (fpsText == null) return;
+        Choreographer.getInstance().removeFrameCallback(frameCallback);
+        layer.removeView(fpsText);
+        fpsText = null;
+    }
+
+    private Button button(String s) {
+        Button b = new Button(activity);
+        b.setText(s);
+        b.setTextColor(TEXT);
+        b.setTextSize(10);
+        b.setAllCaps(false);
+        b.setTypeface(Typeface.DEFAULT_BOLD);
+        b.setPadding(dp(4), 0, dp(4), 0);
+        return b;
+    }
+
+    private TextView text(String s, float size, int color, boolean bold) {
+        TextView t = new TextView(activity);
+        t.setText(s);
+        t.setTextSize(size);
+        t.setTextColor(color);
+        if (bold) t.setTypeface(Typeface.DEFAULT_BOLD);
+        return t;
+    }
+
+    private GradientDrawable round(int fill, int stroke, int width, int radius) {
+        GradientDrawable d = new GradientDrawable();
+        d.setColor(fill);
+        d.setCornerRadius(dp(radius));
+        d.setStroke(dp(width), stroke);
+        return d;
+    }
+
+    private LinearLayout.LayoutParams lp(int w, int h) {
+        return new LinearLayout.LayoutParams(w, h);
+    }
+
+    private LinearLayout.LayoutParams top(int margin) {
+        LinearLayout.LayoutParams p = lp(-1, -2);
+        p.topMargin = dp(margin);
+        return p;
+    }
+
+    private SharedPreferences prefs() {
+        return activity.getSharedPreferences("wlz_settings", Activity.MODE_PRIVATE);
+    }
+
+    private String profile() {
+        int p = prefs().getInt("lag_profile", 1);
+        return p == 3 ? "SIÊU" : (p == 2 ? "MẠNH" : "NHẸ");
+    }
+
+    private void buildLegacyPanel() {
+        // Intentionally unused. The radial menu replaced the large floating panel.
+    }
+
+    private void close() {
+        stopFps();
+        closeRadialMenu();
+        restoreKeyHook();
+        try {
+            decor.removeView(layer);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private int dp(int v) {
+        return Math.round(v * activity.getResources().getDisplayMetrics().density);
+    }
 }
