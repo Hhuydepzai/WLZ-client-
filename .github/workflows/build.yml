@@ -33,7 +33,7 @@ jobs:
           unzip -q app.zip
           unzip -q tools.zip
 
-      - name: Download Minecraft runtime from repository release
+      - name: Download complete Minecraft base APK
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -41,29 +41,46 @@ jobs:
           set -euo pipefail
           mkdir -p minecraft_input
 
-          # The four runtime parts are stored in the draft repository release.
           release_id="405413956"
-          echo "Using Minecraft runtime release id: ${release_id}"
+          echo "Looking for a complete Minecraft source APK in runtime release ${release_id}"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets?per_page=100" \
+            --paginate --jq '.[] | [.name, .url] | @tsv' > /tmp/wlz-release-assets.tsv
 
-          gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets?per_page=100"             --paginate             --jq '.[] | [.name, .url] | @tsv' |
-          while IFS=$'\t' read -r name api_url; do
-            case "${name}" in
-              AndroidManifest.xml|arm64-v8a.zip|dex.zip|libminecraftpe.so)
-                echo "Downloading ${name}"
-                curl -fL --retry 4 --retry-delay 2                   -H "Authorization: Bearer ${GH_TOKEN}"                   -H "Accept: application/octet-stream"                   -H "X-GitHub-Api-Version: 2022-11-28"                   "${api_url}"                   -o "minecraft_input/${name}"
-                test -s "minecraft_input/${name}"
-                echo "${name}: $(stat -c '%s' "minecraft_input/${name}") bytes"
-                ;;
-            esac
-          done
+          # The previous four-file bundle included only manifest, DEX and native
+          # libraries. It omitted assets/ and resources.arsc, so Minecraft crashed
+          # or displayed a gray screen even if Android accepted the APK.
+          BASE_LINE="$(awk -F '\\t' '$1 == "base.apk" || $1 == "Minecraft-base.apk" || $1 == "Minecraft.apk" || $1 == "minecraft-full.apk" || $1 ~ /^Apollon.*\\.apk$/ {print; exit}' /tmp/wlz-release-assets.tsv)"
+          if [ -z "${BASE_LINE}" ]; then
+            echo "::error::No complete source APK is attached to release ${release_id}."
+            echo "::error::Upload the matching full base APK as base.apk (or Minecraft-base.apk / Apollon*.apk). DEX + .so files alone are not enough."
+            exit 1
+          fi
 
-          test -s minecraft_input/AndroidManifest.xml
-          test -s minecraft_input/arm64-v8a.zip
-          test -s minecraft_input/dex.zip
-          test -s minecraft_input/libminecraftpe.so
+          IFS=$'\\t' read -r name api_url <<< "${BASE_LINE}"
+          echo "Downloading complete runtime: ${name}"
+          curl -fL --retry 4 --retry-delay 2 \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/octet-stream" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${api_url}" -o minecraft_input/base.apk
+          test -s minecraft_input/base.apk
+          unzip -tq minecraft_input/base.apk
 
-          unzip -tq minecraft_input/arm64-v8a.zip
-          unzip -tq minecraft_input/dex.zip
+          python3 - <<'PY'
+          import zipfile
+          p = "minecraft_input/base.apk"
+          with zipfile.ZipFile(p) as z:
+              names = set(z.namelist())
+          required = ["AndroidManifest.xml", "resources.arsc", "lib/arm64-v8a/libminecraftpe.so"]
+          missing = [x for x in required if x not in names]
+          if not any(x.startswith("assets/") for x in names):
+              missing.append("assets/*")
+          if not any(x.startswith("classes") and x.endswith(".dex") for x in names):
+              missing.append("classes*.dex")
+          if missing:
+              raise SystemExit("Source APK is incomplete; missing: " + ", ".join(missing))
+          print("Source APK validated: manifest, resource table, assets, DEX and ARM64 runtime found.")
+          PY
 
       - name: Apply WLZ patch
         run: |
@@ -159,7 +176,7 @@ jobs:
           # Verify the final package is WLZ, not com.mojang.minecraftpe.
           AAPT2="${ANDROID_HOME}/build-tools/${BT}/aapt2"
           BADGING="$("${AAPT2}" dump badging dist/WLZ-Minecraft.apk)"
-          printf '%s\n' "$BADGING" | grep -q "package: name='com.mojang.minecraftpe'"
+          printf '%s\n' "$BADGING" | grep -q "package: name='com.wlz.client.launcher'"
           test -s dist/WLZ-Minecraft.apk
 
       - name: Show artifacts
