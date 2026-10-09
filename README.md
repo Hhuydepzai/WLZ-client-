@@ -1,50 +1,25 @@
-# WLZ Client v1.0.0
+# WLZ Client v2.3.1
 
 - Android 9+ (minSdk 28)
-- arm64-v8a
-- WLZ is designed as a single-app Minecraft client: launcher, Minecraft Activity and WLZ HUD live in one APK.
-- No overlay permission is used.
-- Circular in-game WLZ logo opens ClickGUI.
-- OTG keyboard mapping and draggable touch controls are persisted locally.
-- Fix Lag profiles are stored locally.
-- The supplied Minecraft runtime is expected under `minecraft_input/` during the build.
-- Flarial was used only as an architectural reference. No Flarial binary or source is bundled.
+- ARM64 only
+- Separate Android package ID: `com.wlz.client.launcher` (does not replace `com.mojang.minecraftpe`)
+- Launcher, Minecraft Activity, WLZ HUD, circular ClickGUI and key mapper are packaged in one APK.
+- The runtime build must preserve the source APK's `assets/` and `resources.arsc`.
 
-## Single-app runtime
+## Important runtime requirement
 
-```
-WLZ MainActivity
-   |
-   v
-embedded com.mojang.minecraftpe.MainActivity
-   |
-   +--> WlzApplication lifecycle bridge
-   +--> WlzInGameHud / WLZ logo / ClickGUI
-   +--> WlzKeyMapper / touch controls
-   +--> libwlzruntime.so
-```
+The repository's old four-file runtime bundle (`AndroidManifest.xml`, `dex.zip`, `arm64-v8a.zip`, `libminecraftpe.so`) **is incomplete**: it contains DEX and native libraries but not Minecraft's `assets/` or `resources.arsc`. It can produce an APK that installs but crashes or shows a gray screen.
 
-The embed step requires the ARM64 Minecraft native core:
-`lib/arm64-v8a/libminecraftpe.so`.
-Without that file the build intentionally stops instead of producing a fake "Minecraft" APK.
+The build now refuses to publish that incomplete package. The GitHub Release used by the workflow must include a complete, matching source APK named `base.apk`, `Minecraft-base.apk`, `Minecraft.apk`, `minecraft-full.apk`, or `Apollon*.apk`. It must contain:
 
-## Build
-
-GitHub Actions builds a small WLZ helper first. When `minecraft_input/` contains the Minecraft APK or the supplied `filemc*.zip` + `assets*.zip` split set, the workflow builds the single APK and signs the CI artifact.
-
-
-### Runtime tích hợp Minecraft
-
-CI chỉ đóng gói APK Minecraft khi `minecraft_input/` có runtime Minecraft do người dùng cung cấp. Bản build hiện tại dùng một APK Minecraft ARM64 làm nguồn, giữ `com.mojang.minecraftpe.MainActivity`, thêm WLZ Application/HUD và native runtime vào cùng APK. Không cần overlay permission và không khởi chạy ứng dụng Minecraft ngoài.
-
-File đầu vào tối thiểu cho đường build này là APK Minecraft có:
 - `AndroidManifest.xml`
-- `classes.dex`
+- `resources.arsc`
+- `assets/`
+- `classes*.dex`
 - `lib/arm64-v8a/libminecraftpe.so`
-- assets/resources đi kèm của chính APK
 
-Đặt APK vào `minecraft_input/`. Với bộ split dạng `filemc*.zip` + `assets*.zip`, CI ghép toàn bộ file thành một APK-shaped runtime trước khi rebuild. Không cần cài Minecraft riêng.
+The embed step preserves the source APK's assets and resource table, inserts the WLZ helper DEX/native library, and uses the helper's manifest with WLZ's unique package ID. CI validates the final ZIP, package ID, assets, resource table and ARM64 library before upload.
 
-Native WLZ 1.0.0 hiện có capability detection theo signature. Các module chỉ xuất hiện trong ClickGUI khi backend tương ứng thực sự resolve được: Zoom, Unlock FPS, Fullbright, Snaplook. FPS Counter là module HUD. Các module chưa có adapter đúng phiên bản sẽ bị ẩn thay vì hiển thị nút giả.
+## Build status
 
-Nguồn tham khảo native: BedrockTools (MIT) cho kỹ thuật signature/patch; Flarial chỉ được dùng làm tham chiếu kiến trúc. Không đóng gói binary Flarial.
+The complete source APK must be attached to the runtime Release for the final build to succeed. Until it is present, CI intentionally exits with an explanatory error instead of publishing an APK known to be incomplete.
