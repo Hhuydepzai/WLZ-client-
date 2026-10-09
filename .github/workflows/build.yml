@@ -49,14 +49,14 @@ jobs:
           # The previous four-file bundle included only manifest, DEX and native
           # libraries. It omitted assets/ and resources.arsc, so Minecraft crashed
           # or displayed a gray screen even if Android accepted the APK.
-          BASE_LINE="$(awk -F '\\t' '$1 == "base.apk" || $1 == "Minecraft-base.apk" || $1 == "Minecraft.apk" || $1 == "minecraft-full.apk" || $1 ~ /^Apollon.*\\.apk$/ {print; exit}' /tmp/wlz-release-assets.tsv)"
+          BASE_LINE="$(awk -F '\t' '$1 == "base.apk" || $1 == "Minecraft-base.apk" || $1 == "Minecraft.apk" || $1 == "minecraft-full.apk" || $1 ~ /^Apollon.*\.apk$/ {print; exit}' /tmp/wlz-release-assets.tsv)"
           if [ -z "${BASE_LINE}" ]; then
             echo "::error::No complete source APK is attached to release ${release_id}."
             echo "::error::Upload the matching full base APK as base.apk (or Minecraft-base.apk / Apollon*.apk). DEX + .so files alone are not enough."
             exit 1
           fi
 
-          IFS=$'\\t' read -r name api_url <<< "${BASE_LINE}"
+          IFS=$'\t' read -r name api_url <<< "${BASE_LINE}"
           echo "Downloading complete runtime: ${name}"
           curl -fL --retry 4 --retry-delay 2 \
             -H "Authorization: Bearer ${GH_TOKEN}" \
@@ -94,9 +94,9 @@ jobs:
           from pathlib import Path
           p = Path("app/src/main/cpp/wlzclient.cpp")
           s = p.read_text()
-          s = s.replace("void doSnapNow() {\\n    if (g_modules[7].load() && g_lastPlayer) {\\n        snapPlayer(g_lastPlayer);\\n        g_snapPending.store(false);\\n    }\\n}\\n\\n", "")
-          s = s.replace("    applyFullbright();\\n    doSnapNow();\\n}", "    applyFullbright();\\n}")
-          s = s.replace("    if (index==7 && on) {\\n        g_snapPending.store(true);\\n        doSnapNow();\\n    }\\n    if (index==4) applyFullbright();", "    // Snaplook index 7 is not part of the current Apollon port.\\n    if (index==4) applyFullbright();")
+          s = s.replace("void doSnapNow() {\n    if (g_modules[7].load() && g_lastPlayer) {\n        snapPlayer(g_lastPlayer);\n        g_snapPending.store(false);\n    }\n}\n\n", "")
+          s = s.replace("    applyFullbright();\n    doSnapNow();\n}", "    applyFullbright();\n}")
+          s = s.replace("    if (index==7 && on) {\n        g_snapPending.store(true);\n        doSnapNow();\n    }\n    if (index==4) applyFullbright();", "    // Snaplook index 7 is not part of the current Apollon port.\n    if (index==4) applyFullbright();")
           p.write_text(s)
           PY
 
@@ -176,7 +176,7 @@ jobs:
           # Verify independent package identity and full game payload.
           AAPT2="${ANDROID_HOME}/build-tools/${BT}/aapt2"
           BADGING="$("${AAPT2}" dump badging dist/WLZ-Minecraft.apk)"
-          printf '%s\\n' "$BADGING" | grep -q "package: name='com.wlz.client.launcher'"
+          printf '%s\n' "$BADGING" | grep -q "package: name='com.wlz.client.launcher'"
           unzip -tq dist/WLZ-Minecraft.apk
           unzip -Z1 dist/WLZ-Minecraft.apk | grep -q '^assets/'
           unzip -Z1 dist/WLZ-Minecraft.apk | grep -qx 'resources.arsc'
