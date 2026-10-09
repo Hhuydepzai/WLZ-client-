@@ -3,7 +3,7 @@ package com.wlz.client;
 import android.app.Activity;
 import android.os.Bundle;
 
-public final class WlzApplication extends com.zihao_il.MinecraftApplication {
+public final class WlzApplication extends com.pairip.application.Application {
     private static final long HUD_ATTACH_DELAY_MS = 5000L;
 
     private final ActivityLifecycleCallbacks callbacks = new ActivityLifecycleCallbacks() {
@@ -45,15 +45,14 @@ public final class WlzApplication extends com.zihao_il.MinecraftApplication {
 
     @Override
     public void onCreate() {
+        // Preserve the actual Application superclass declared by Minecraft's
+        // original binary manifest. The previous build extended the absent
+        // com.zihao_il.MinecraftApplication class, which could crash before
+        // either the launcher or Minecraft Activity started.
+        super.onCreate();
+        WlzModuleManager.initialize(this);
         if (isMinecraftProcess()) {
-            // The original Minecraft Application lifecycle runs only inside
-            // the dedicated :mc process. The launcher process stays clean.
-            super.onCreate();
-            WlzModuleManager.initialize(this);
             registerActivityLifecycleCallbacks(callbacks);
-        } else {
-            // Do not call MinecraftApplication.onCreate() in the launcher.
-            WlzModuleManager.initialize(this);
         }
     }
 
