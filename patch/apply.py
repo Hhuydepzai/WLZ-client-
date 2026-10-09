@@ -28,14 +28,6 @@ def prepare_pairip_stub():
         encoding="utf-8",
     )
 
-    mc_dir = stub_root / "com/zihao_il"
-    mc_dir.mkdir(parents=True, exist_ok=True)
-    mc_java = mc_dir / "MinecraftApplication.java"
-    mc_java.write_text(
-        "package com.zihao_il;\n"
-        "public class MinecraftApplication extends com.pairip.application.Application {}\n",
-        encoding="utf-8",
-    )
 
     sdk_home = Path(os.environ.get("ANDROID_HOME", ""))
     candidates = [sdk_home / "platforms" / "android-35" / "android.jar"]
@@ -52,7 +44,7 @@ def prepare_pairip_stub():
     subprocess.run(
         [
             "javac", "-source", "8", "-target", "8", "-cp", str(sdk),
-            "-d", str(classes), str(pairip_java), str(mc_java)
+            "-d", str(classes), str(pairip_java)
         ],
         check=True,
     )
