@@ -54,7 +54,7 @@ prepare_minecraft_application_stub()
 
 for name in [
     "MainActivity.java",
-    "WlzMinecraftApplication.java",
+    "WlzApplication.java",
     "WlzBootstrapProvider.java",
     "WlzLogoView.java",
     "WlzModuleManager.java",
