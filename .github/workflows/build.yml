@@ -176,15 +176,18 @@ jobs:
                           except ValueError:
                               continue
           P().feed(data)
-          for match in re.findall(r"""(?:https?:)?//[A-Za-z0-9._~:/?#\[\]@!          for match in re.findall(r"""(?:https?:)?//[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+""", data):
-              found.append(urljoin(base, match))
+          # Some shortener pages contain malformed pseudo-URLs (for example
+          # bracketed hosts or SVG namespaces); ignore those instead of aborting.
+          for match in re.findall(r"""(?:https?:)?//[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+""", data):
+              try:
+                  found.append(urljoin(base, match))
+              except ValueError:
+                  continue
           for match in re.findall(r"""(?:location\.href|window\.location|document\.location)\s*=\s*['"]([^'"]+)""", data, re.I):
-              found.append(urljoin(base, match))'()*+,;=%-]+""", data):
-              try: found.append(urljoin(base, match))
-              except ValueError: continue
-          for match in re.findall(r"""(?:location\.href|window\.location|document\.location)\s*=\s*['"]([^'"]+)""", data, re.I):
-              try: found.append(urljoin(base, match))
-              except ValueError: continue
+              try:
+                  found.append(urljoin(base, match))
+              except ValueError:
+                  continue
           clean, seen = [], set()
           blocked = ("doubleclick.net", "googlesyndication.com", "adf.ly", "linkvertise.com", "w3.org", "cloudfront.net", "ggclicker.com")
           for u in found:
