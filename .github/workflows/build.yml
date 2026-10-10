@@ -236,8 +236,10 @@ jobs:
           async def main():
               started = asyncio.get_running_loop().time()
               found = asyncio.Event()
-              saved = []
               pages = []
+              # Keep every Playwright download save task alive until it completes.
+              # Closing Chromium while save_as is pending causes TargetClosedError.
+              download_tasks = set()
               async with async_playwright() as p:
                   browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
                   context = await browser.new_context(
@@ -259,7 +261,11 @@ jobs:
                           print("Download candidate rejected:", repr(exc), flush=True)
                   def bind(page):
                       pages.append(page)
-                      page.on("download", lambda d: asyncio.create_task(on_download(d)))
+                      def schedule_download(download):
+                          task = asyncio.create_task(on_download(download))
+                          download_tasks.add(task)
+                          task.add_done_callback(download_tasks.discard)
+                      page.on("download", schedule_download)
                       page.on("dialog", lambda dialog: asyncio.create_task(dialog.dismiss()))
                   context.on("page", bind)
 
@@ -330,6 +336,17 @@ jobs:
                           # Choose the most recently opened page after target=_blank/new-window redirects.
                           if pages:
                               page=pages[-1]
+                  # Do not close the page/context before saving any download event.
+                  # CDN pages trigger a download asynchronously after the button click.
+                  if download_tasks:
+                      pending_downloads = tuple(download_tasks)
+                      try:
+                          await asyncio.wait_for(
+                              asyncio.gather(*pending_downloads, return_exceptions=True),
+                              timeout=180,
+                          )
+                      except asyncio.TimeoutError:
+                          print("Timed out waiting for the pending APK download save.", flush=True)
                   await browser.close()
               if not found.is_set() or not OUT.is_file():
                   raise SystemExit("Browser did not obtain a complete APK; no broken output was produced.")
