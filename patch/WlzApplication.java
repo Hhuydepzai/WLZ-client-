@@ -8,7 +8,7 @@ import android.os.Bundle;
  * is provided by the base APK, so the helper is compiled against a compile-only
  * stub and never bundles a fake replacement class.
  */
-public final class WlzApplication extends com.zihao_il.MinecraftApplication {
+public final class WlzApplication extends com.pairip.application.Application {
     private static final long HUD_ATTACH_DELAY_MS = 1500L;
 
     private final ActivityLifecycleCallbacks callbacks = new ActivityLifecycleCallbacks() {
@@ -38,7 +38,7 @@ public final class WlzApplication extends com.zihao_il.MinecraftApplication {
     };
 
     @Override public void onCreate() {
-        // The real com.zihao_il.MinecraftApplication is in the Apollon base DEX.
+        // Preserve the base APK's PairIP bootstrap and its normal license/startup flow.
         super.onCreate();
         WlzModuleManager.initialize(this);
         // Do not gate this on a :mc process name: the supplied V6.6 base APK
