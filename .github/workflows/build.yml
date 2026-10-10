@@ -73,58 +73,132 @@ jobs:
       - name: Download complete Minecraft base APK
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: \${{ github.token }}
         run: |
           set -euo pipefail
           mkdir -p minecraft_input
           release_id="405413956"
 
-          # Prefer a pinned asset provided by this repo's release. Older releases
-          # only contain manifest/Dex/native fragments, which are not a complete APK.
-          gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets?per_page=100" \
+          # Prefer a complete source APK already attached to the repository release.
+          gh api "repos/\${GITHUB_REPOSITORY}/releases/\${release_id}/assets?per_page=100" \
             --paginate --jq '.[] | [.name, .url] | @tsv' > /tmp/wlz-release-assets.tsv
           BASE_LINE="$(awk -F '\t' '$1 == "base.apk" || $1 == "Minecraft-base.apk" || $1 == "Minecraft.apk" || $1 == "minecraft-full.apk" || $1 ~ /^Apollon.*\.apk$/ {print; exit}' /tmp/wlz-release-assets.tsv)"
 
-          if [ -n "${BASE_LINE}" ]; then
-            IFS=$'\t' read -r name api_url <<< "${BASE_LINE}"
-            echo "Downloading full Minecraft base asset from release: ${name}"
+          is_full_apk() {
+            python3 - "$1" <<'PY'
+          import re, sys, zipfile
+          try:
+              with zipfile.ZipFile(sys.argv[1]) as z:
+                  names = set(z.namelist())
+              required = ["AndroidManifest.xml", "resources.arsc", "lib/arm64-v8a/libminecraftpe.so"]
+              missing = [n for n in required if n not in names]
+              if not any(n.startswith("assets/") for n in names): missing.append("assets/*")
+              if not any(re.fullmatch(r"classes[0-9]*\.dex", n) for n in names): missing.append("classes*.dex")
+              if missing: sys.exit(1)
+          except Exception:
+              sys.exit(1)
+          PY
+          }
+
+          if [ -n "\${BASE_LINE}" ]; then
+            IFS=$'\t' read -r name api_url <<< "\${BASE_LINE}"
+            echo "Trying complete base asset from release: \${name}"
             curl -fL --retry 4 --retry-delay 2 \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Authorization: Bearer \${GH_TOKEN}" \
               -H "Accept: application/octet-stream" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
-              "${api_url}" -o minecraft_input/base.apk
-          else
-            # Source matching the user-provided Apollon V6.6 64-bit / MCPE 26.51 build.
-            # Never package blindly: the validation below rejects interstitial HTML,
-            # split APKs, or incomplete runtime downloads.
-            SOURCE_URL="${APOLLON_V66_ARM64_URL:-https://go.linkify.ru/2Jri}"
-            echo "No complete APK in Release; trying the published Apollon V6.6 ARM64 source."
-            curl -fL --retry 5 --retry-all-errors --retry-delay 3 \
-              --connect-timeout 30 --max-time 1800 \
-              --user-agent "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128 Safari/537.36" \
-              "${SOURCE_URL}" -o minecraft_input/base.apk
+              "\${api_url}" -o /tmp/wlz-candidate.apk
+            if is_full_apk /tmp/wlz-candidate.apk; then
+              mv /tmp/wlz-candidate.apk minecraft_input/base.apk
+            else
+              echo "::warning::Release asset \${name} isn't a complete APK; trying the published source URL."
+              rm -f /tmp/wlz-candidate.apk
+            fi
+          fi
+
+          if [ ! -s minecraft_input/base.apk ]; then
+            # Telegram post for Apollon V6.6 / MCPE 26.51 explicitly labels this
+            # short link as the 64-bit APK. Link shorteners may show an HTML interstitial
+            # to curl, so resolve href/meta/script URLs in a bounded, validated loop.
+            SOURCE_URL="\${APOLLON_V66_ARM64_URL:-https://go.linkify.ru/2Jri}"
+            printf '%s\n' "\${SOURCE_URL}" > /tmp/wlz-candidates.txt
+            found=0
+            for depth in 1 2 3 4; do
+              [ -s /tmp/wlz-candidates.txt ] || break
+              : > /tmp/wlz-next-candidates.txt
+              while IFS= read -r candidate_url; do
+                [ -n "\${candidate_url}" ] || continue
+                echo "Resolving download source (hop \${depth}): \${candidate_url}"
+                if ! curl -fL --retry 2 --retry-delay 2 \
+                    --connect-timeout 30 --max-time 1800 \
+                    --user-agent "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128 Safari/537.36" \
+                    -e "https://t.me/" \
+                    "\${candidate_url}" -o /tmp/wlz-candidate.bin; then
+                  continue
+                fi
+
+                if is_full_apk /tmp/wlz-candidate.bin; then
+                  mv /tmp/wlz-candidate.bin minecraft_input/base.apk
+                  found=1
+                  break
+                fi
+
+                # Parse the interstitial (only bounded http(s) links, relative
+                # links are resolved against the current URL; reject known ad hosts).
+                python3 - /tmp/wlz-candidate.bin "\${candidate_url}" >> /tmp/wlz-next-candidates.txt <<'PY'
+          from html.parser import HTMLParser
+          from urllib.parse import urljoin, urlparse, parse_qs, unquote
+          import re, sys
+          path, base = sys.argv[1], sys.argv[2]
+          try:
+              data = open(path, "rb").read(2_000_000).decode("utf-8", "ignore")
+          except Exception:
+              data = ""
+          found = []
+          class P(HTMLParser):
+              def handle_starttag(self, tag, attrs):
+                  a = dict(attrs)
+                  for key in ("href", "src", "content", "data-url", "data-href"):
+                      value = a.get(key, "")
+                      if not value: continue
+                      m = re.search(r"url\s*=\s*([^;]+)", value, re.I)
+                      if m: value = m.group(1).strip(" '\"")
+                      for candidate in [value, unquote(value)]:
+                          u = urljoin(base, candidate)
+                          if urlparse(u).scheme in ("http", "https"): found.append(u)
+          P().feed(data)
+          for match in re.findall(r"""(?:https?:)?//[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+""", data):
+              found.append(urljoin(base, match))
+          for match in re.findall(r"""(?:location\.href|window\.location|document\.location)\s*=\s*['"]([^'"]+)""", data, re.I):
+              found.append(urljoin(base, match))
+          clean, seen = [], set()
+          blocked = ("doubleclick.net", "googlesyndication.com", "adf.ly", "linkvertise.com")
+          for u in found:
+              u = u.strip(" \t\r\n'\"<>),;")
+              parsed = urlparse(u)
+              if parsed.scheme not in ("http", "https") or not parsed.netloc: continue
+              if any(host in parsed.netloc.lower() for host in blocked): continue
+              if u not in seen and len(clean) < 20:
+                  seen.add(u); clean.append(u)
+          print("\n".join(clean))
+          PY
+                rm -f /tmp/wlz-candidate.bin
+              done < /tmp/wlz-candidates.txt
+              [ "\${found}" -eq 0 ] || break
+              sort -u /tmp/wlz-next-candidates.txt > /tmp/wlz-candidates.txt
+            done
+            if [ "\${found}" -ne 1 ]; then
+              echo "::error::Could not resolve Apollon V6.6 ARM64 to a complete APK. The source URL returned HTML or an invalid file."
+              echo "The downloaded page was not accepted as an APK; refusing to produce a crash-prone client."
+              exit 1
+            fi
           fi
 
           test -s minecraft_input/base.apk
           file minecraft_input/base.apk
           sha256sum minecraft_input/base.apk | tee minecraft_input/base.sha256
           unzip -tq minecraft_input/base.apk
-
-          python3 - <<'PY'
-          import re, zipfile
-          p = "minecraft_input/base.apk"
-          with zipfile.ZipFile(p) as z:
-              names = set(z.namelist())
-          required = ["AndroidManifest.xml", "resources.arsc", "lib/arm64-v8a/libminecraftpe.so"]
-          missing = [x for x in required if x not in names]
-          if not any(n.startswith("assets/") for n in names):
-              missing.append("assets/*")
-          if not any(re.fullmatch(r"classes[0-9]*\\.dex", n) for n in names):
-              missing.append("classes*.dex")
-          if missing:
-              raise SystemExit("Source APK is incomplete or not an APK; missing: " + ", ".join(missing))
-          print(f"Source APK validated: {len(names)} entries, manifest, resources.arsc, assets, DEX and ARM64 runtime found.")
-          PY
+          echo "Full base APK structure verified; continuing to final packaging."
 
       - name: Setup Android SDK build tools
         uses: android-actions/setup-android@v4
