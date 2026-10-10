@@ -19,12 +19,12 @@ def prepare_minecraft_application_stub():
     # This class is excluded from the helper APK by compileOnly; the final
     # combined APK resolves the superclass from the original base DEX.
     stub_root = APP / ".minecraft_application_stub"
-    stub_dir = stub_root / "com/zihao_il"
+    stub_dir = stub_root / "com/pairip/application"
     stub_dir.mkdir(parents=True, exist_ok=True)
-    java_file = stub_dir / "MinecraftApplication.java"
+    java_file = stub_dir / "Application.java"
     java_file.write_text(
-        "package com.zihao_il;\n"
-        "public class MinecraftApplication extends android.app.Application {}\n",
+        "package com.pairip.application;\n"
+        "public class Application extends android.app.Application {}\n",
         encoding="utf-8",
     )
 
