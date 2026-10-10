@@ -169,13 +169,22 @@ jobs:
                       m = re.search(r"url\s*=\s*([^;]+)", value, re.I)
                       if m: value = m.group(1).strip(" '\"")
                       for candidate in [value, unquote(value)]:
-                          u = urljoin(base, candidate)
-                          if urlparse(u).scheme in ("http", "https"): found.append(u)
+                          try:
+                              u = urljoin(base, candidate)
+                              parsed = urlparse(u)
+                              if parsed.scheme in ("http", "https"): found.append(u)
+                          except ValueError:
+                              continue
           P().feed(data)
-          for match in re.findall(r"""(?:https?:)?//[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+""", data):
+          for match in re.findall(r"""(?:https?:)?//[A-Za-z0-9._~:/?#\[\]@!          for match in re.findall(r"""(?:https?:)?//[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+""", data):
               found.append(urljoin(base, match))
           for match in re.findall(r"""(?:location\.href|window\.location|document\.location)\s*=\s*['"]([^'"]+)""", data, re.I):
-              found.append(urljoin(base, match))
+              found.append(urljoin(base, match))'()*+,;=%-]+""", data):
+              try: found.append(urljoin(base, match))
+              except ValueError: continue
+          for match in re.findall(r"""(?:location\.href|window\.location|document\.location)\s*=\s*['"]([^'"]+)""", data, re.I):
+              try: found.append(urljoin(base, match))
+              except ValueError: continue
           clean, seen = [], set()
           blocked = ("doubleclick.net", "googlesyndication.com", "adf.ly", "linkvertise.com", "w3.org", "cloudfront.net", "ggclicker.com")
           for u in found:
