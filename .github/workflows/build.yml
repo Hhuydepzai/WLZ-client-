@@ -192,7 +192,7 @@ jobs:
               [ "${found}" -eq 0 ] || break
               sort -u /tmp/wlz-next-candidates.txt > /tmp/wlz-candidates.txt
             done
-            if [ "\${found}" -ne 1 ]; then
+            if [ "${found}" -ne 1 ]; then
               echo "::warning::Direct HTTP resolution failed; trying a browser session for the download button."
               python3 -m venv /tmp/wlz-browser-venv
               /tmp/wlz-browser-venv/bin/pip install --disable-pip-version-check -q playwright
@@ -217,7 +217,7 @@ jobs:
                   required = ["AndroidManifest.xml", "resources.arsc", "lib/arm64-v8a/libminecraftpe.so"]
                   return (all(x in names for x in required)
                           and any(n.startswith("assets/") for n in names)
-                          and any(re.fullmatch(r"classes[0-9]*\\.dex", n) for n in names))
+                          and any(re.fullmatch(r"classes[0-9]*\.dex", n) for n in names))
               except Exception:
                   return False
 
@@ -272,7 +272,7 @@ jobs:
                           try:
                               candidates = await page.locator("a,button,input[type=button],input[type=submit],[role=button]").evaluate_all("""
                               els => els.map((e,i) => {
-                                const text = ((e.innerText || e.value || e.getAttribute('aria-label') || '') + '').trim().replace(/\\\\s+/g,' ').slice(0,100);
+                                const text = ((e.innerText || e.value || e.getAttribute('aria-label') || '') + '').trim().replace(/\\s+/g,' ').slice(0,100);
                                 const href = e.href || e.getAttribute('href') || '';
                                 const onclick = e.getAttribute('onclick') || '';
                                 return {i, tag:e.tagName, text, href, onclick, disabled:!!e.disabled};
