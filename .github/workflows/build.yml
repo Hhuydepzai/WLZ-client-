@@ -192,9 +192,132 @@ jobs:
               [ "${found}" -eq 0 ] || break
               sort -u /tmp/wlz-next-candidates.txt > /tmp/wlz-candidates.txt
             done
-            if [ "${found}" -ne 1 ]; then
-              echo "::error::Could not resolve Apollon V6.6 ARM64 to a complete APK. The source URL returned HTML or an invalid file."
-              echo "The downloaded page was not accepted as an APK; refusing to produce a crash-prone client."
+            if [ "\${found}" -ne 1 ]; then
+              echo "::warning::Direct HTTP resolution failed; trying a browser session for the download button."
+              python3 -m venv /tmp/wlz-browser-venv
+              /tmp/wlz-browser-venv/bin/pip install --disable-pip-version-check -q playwright
+              /tmp/wlz-browser-venv/bin/python -m playwright install --with-deps chromium
+              /tmp/wlz-browser-venv/bin/python - <<'PY'
+          import asyncio, os, re, shutil, sys, zipfile
+          from pathlib import Path
+          from urllib.parse import urlparse
+          from playwright.async_api import async_playwright
+
+          OUT = Path("minecraft_input/base.apk")
+          TEMP = Path("/tmp/wlz-browser-download.bin")
+          SOURCES = [
+              os.environ.get("APOLLON_V66_ARM64_URL", "https://go.linkify.ru/2Jri"),
+              "https://dl6.cdn9mc.com/dl2.php?file=Apollon-Client-MCPE-26.51-64bit.apk",
+              "https://files2.cdn9mc.com/dl2.php?file=Apollon-Client-MCPE-26.51-64bit.apk",
+          ]
+          def is_full_apk(path):
+              try:
+                  with zipfile.ZipFile(path) as z:
+                      names = set(z.namelist())
+                  required = ["AndroidManifest.xml", "resources.arsc", "lib/arm64-v8a/libminecraftpe.so"]
+                  return (all(x in names for x in required)
+                          and any(n.startswith("assets/") for n in names)
+                          and any(re.fullmatch(r"classes[0-9]*\\.dex", n) for n in names))
+              except Exception:
+                  return False
+
+          async def main():
+              started = asyncio.get_running_loop().time()
+              found = asyncio.Event()
+              saved = []
+              pages = []
+              async with async_playwright() as p:
+                  browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
+                  context = await browser.new_context(
+                      accept_downloads=True,
+                      user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36",
+                      viewport={"width": 1365, "height": 900},
+                  )
+                  async def on_download(download):
+                      try:
+                          await download.save_as(str(TEMP))
+                          if is_full_apk(TEMP):
+                              shutil.copyfile(TEMP, OUT)
+                              print("Browser obtained and validated full APK:", download.suggested_filename, OUT.stat().st_size, flush=True)
+                              found.set()
+                          else:
+                              print("Ignoring non-APK download:", download.suggested_filename, TEMP.stat().st_size if TEMP.exists() else 0, flush=True)
+                              TEMP.unlink(missing_ok=True)
+                      except Exception as exc:
+                          print("Download candidate rejected:", repr(exc), flush=True)
+                  def bind(page):
+                      pages.append(page)
+                      page.on("download", lambda d: asyncio.create_task(on_download(d)))
+                      page.on("dialog", lambda dialog: asyncio.create_task(dialog.dismiss()))
+                  context.on("page", bind)
+
+                  for source in SOURCES:
+                      if found.is_set() or asyncio.get_running_loop().time() - started > 900:
+                          break
+                      print("Browser opening:", source, flush=True)
+                      page = await context.new_page()
+                      try:
+                          await page.goto(source, wait_until="domcontentloaded", timeout=90000)
+                      except Exception as exc:
+                          print("Initial navigation note:", str(exc)[:180], flush=True)
+                      for hop in range(4):
+                          if found.is_set() or asyncio.get_running_loop().time() - started > 900:
+                              break
+                          try:
+                              await page.wait_for_timeout(3500)
+                          except Exception:
+                              pass
+                          if found.is_set():
+                              break
+                          try:
+                              candidates = await page.locator("a,button,input[type=button],input[type=submit],[role=button]").evaluate_all("""
+                              els => els.map((e,i) => {
+                                const text = ((e.innerText || e.value || e.getAttribute('aria-label') || '') + '').trim().replace(/\\\\s+/g,' ').slice(0,100);
+                                const href = e.href || e.getAttribute('href') || '';
+                                const onclick = e.getAttribute('onclick') || '';
+                                return {i, tag:e.tagName, text, href, onclick, disabled:!!e.disabled};
+                              })
+                              """)
+                          except Exception:
+                              candidates = []
+                          def score(x):
+                              text=(x.get("text","")+" "+x.get("href","")+" "+x.get("onclick","")).lower()
+                              host=urlparse(x.get("href","")).netloc.lower()
+                              s=0
+                              if any(k in text for k in ["download","get file","download apk","continue","start download","click here"]): s+=20
+                              if any(k in host for k in ["cdn9mc.com","linkify.ru"]): s+=12
+                              if any(k in text for k in ["doubleclick","adservice","googlesyndication","ggclicker","advert"]): s-=100
+                              if x.get("disabled"): s-=100
+                              if x.get("tag")=="BUTTON" or "button" in x.get("href","").lower(): s+=2
+                              return s
+                          candidates=sorted((x for x in candidates if score(x)>0),key=score,reverse=True)[:6]
+                          if not candidates:
+                              # Let the shortener's JS countdown/cookie logic settle.
+                              await page.wait_for_timeout(4000)
+                              continue
+                          for item in candidates:
+                              if found.is_set(): break
+                              print("Trying page action:", item.get("text","")[:60], item.get("href","")[:160], flush=True)
+                              try:
+                                  locator=page.locator("a,button,input[type=button],input[type=submit],[role=button]").nth(item["i"])
+                                  await locator.click(timeout=5000, force=True, no_wait_after=True)
+                              except Exception:
+                                  href=item.get("href","")
+                                  if href.startswith(("http://","https://")) and any(k in href.lower() for k in ["dl2.php","download","linkify.ru"]):
+                                      try: await page.goto(href,wait_until="domcontentloaded",timeout=30000)
+                                      except Exception: pass
+                              await page.wait_for_timeout(1800)
+                          # Choose the most recently opened page after target=_blank/new-window redirects.
+                          if pages:
+                              page=pages[-1]
+                  await browser.close()
+              if not found.is_set() or not OUT.is_file():
+                  raise SystemExit("Browser did not obtain a complete APK; no broken output was produced.")
+          asyncio.run(main())
+          PY
+            fi
+            if [ ! -s minecraft_input/base.apk ]; then
+              echo "::error::Could not obtain a complete Apollon base APK; refusing to generate a gray-screen/crashing client."
               exit 1
             fi
           fi
