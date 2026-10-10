@@ -123,7 +123,7 @@ jobs:
             SOURCE_URL="${APOLLON_V66_ARM64_URL:-https://go.linkify.ru/2Jri}"
             # Try the original v6.6 short link and both published CDN hosts
             # for the matching MCPE 26.51 64-bit download.
-            printf '%s\n' "\${SOURCE_URL}" \
+            printf '%s\n' "${SOURCE_URL}" \
               "https://dl6.cdn9mc.com/dl2.php?file=Apollon-Client-MCPE-26.51-64bit.apk" \
               "https://files2.cdn9mc.com/dl2.php?file=Apollon-Client-MCPE-26.51-64bit.apk" \
               > /tmp/wlz-candidates.txt
