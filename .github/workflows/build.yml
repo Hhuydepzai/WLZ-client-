@@ -293,19 +293,27 @@ jobs:
                           except Exception:
                               candidates = []
                           def score(x):
-                              text=(x.get("text","")+" "+x.get("href","")+" "+x.get("onclick","")).lower()
+                              label=(x.get("text","") or "").strip().lower()
+                              text=(label+" "+x.get("href","")+" "+x.get("onclick","")).lower()
                               host=urlparse(x.get("href","")).netloc.lower()
+                              consent=label in ["deny","reject","reject all","accept all","accept","agree","i agree","allow all","adjust","consent"]
+                              source_host=("cdn9mc.com" in host or "linkify.ru" in host)
+                              if not source_host and not consent: return -100
                               s=0
-                              if any(k in text for k in ["download","get file","download apk","continue","start download","click here"]): s+=20
-                              if any(k in host for k in ["cdn9mc.com","linkify.ru"]): s+=12
-                              if any(k in text for k in ["doubleclick","adservice","googlesyndication","ggclicker","advert"]): s-=100
+                              if label in ["download","download apk","download file","get file"]: s+=30
+                              elif any(k in text for k in ["download","get file","start download"]): s+=15
+                              if source_host: s+=12
+                              if consent: s+=25
+                              if any(k in text for k in ["doubleclick","adservice","googlesyndication","ggclicker","advert","alibaba"]): s-=100
                               if x.get("disabled"): s-=100
                               if x.get("tag")=="BUTTON" or "button" in x.get("href","").lower(): s+=2
                               return s
-                          candidates=sorted((x for x in candidates if score(x)>0),key=score,reverse=True)[:6]
+                          candidates=sorted((x for x in candidates if score(x)>0),key=score,reverse=True)[:1]
                           if not candidates:
-                              # Let the shortener's JS countdown/cookie logic settle.
-                              await page.wait_for_timeout(4000)
+                              # Switch to the latest popup only to handle exact consent/download controls.
+                              if pages:
+                                  page=pages[-1]
+                              await page.wait_for_timeout(1800)
                               continue
                           for item in candidates:
                               if found.is_set(): break
