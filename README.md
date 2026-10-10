@@ -29,4 +29,4 @@ The complete source APK must be attached to the runtime Release for the final bu
 
 The packager now patches the original base APK's binary manifest instead of replacing it with the helper manifest. This preserves the source Minecraft permissions, providers, metadata, resource IDs, asset bundle and native bootstrap declarations. WLZ uses the separate package ID `com.wlzclient.launcher`; original provider authorities are remapped while component class names remain unchanged. The WLZ launcher is registered as the launcher entry and the original Minecraft activity keeps its remaining intent filters.
 
-The Application extension is compiled against a compile-only stub for `com.zihao_il.MinecraftApplication`, which exists in the supplied Apollon V6.6 base DEX. The stub is not packaged in the final APK.
+The Application extension is compiled against a compile-only stub for `com.pairip.application.Application`, the PairIP bootstrap observed in the supplied Apollon runtime DEX. The stub is not packaged in the final APK. Using a superclass not present in the base DEX can crash the app as soon as Android creates the Application object.
