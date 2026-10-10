@@ -121,7 +121,12 @@ jobs:
             # short link as the 64-bit APK. Link shorteners may show an HTML interstitial
             # to curl, so resolve href/meta/script URLs in a bounded, validated loop.
             SOURCE_URL="${APOLLON_V66_ARM64_URL:-https://go.linkify.ru/2Jri}"
-            printf '%s\n' "${SOURCE_URL}" > /tmp/wlz-candidates.txt
+            # Try the original v6.6 short link and both published CDN hosts
+            # for the matching MCPE 26.51 64-bit download.
+            printf '%s\n' "\${SOURCE_URL}" \
+              "https://dl6.cdn9mc.com/dl2.php?file=Apollon-Client-MCPE-26.51-64bit.apk" \
+              "https://files2.cdn9mc.com/dl2.php?file=Apollon-Client-MCPE-26.51-64bit.apk" \
+              > /tmp/wlz-candidates.txt
             found=0
             for depth in 1 2 3 4; do
               [ -s /tmp/wlz-candidates.txt ] || break
@@ -172,7 +177,7 @@ jobs:
           for match in re.findall(r"""(?:location\.href|window\.location|document\.location)\s*=\s*['"]([^'"]+)""", data, re.I):
               found.append(urljoin(base, match))
           clean, seen = [], set()
-          blocked = ("doubleclick.net", "googlesyndication.com", "adf.ly", "linkvertise.com")
+          blocked = ("doubleclick.net", "googlesyndication.com", "adf.ly", "linkvertise.com", "w3.org", "cloudfront.net", "ggclicker.com")
           for u in found:
               u = u.strip(" \t\r\n'\"<>),;")
               parsed = urlparse(u)
