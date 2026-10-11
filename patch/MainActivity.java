@@ -28,7 +28,6 @@ public final class MainActivity extends Activity {
     private static final int MUTED = Color.rgb(150, 156, 166);
     private TextView runtimeStatus;
     private Button playButton;
-    private Button hotkeyButton;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -66,20 +65,20 @@ public final class MainActivity extends Activity {
 
         LinearLayout gridA = new LinearLayout(this);
         gridA.setOrientation(LinearLayout.HORIZONTAL);
-        gridA.addView(featureCard("ZOOM", "Phóng to trong game", "01"),
+        gridA.addView(featureCard("FIX LAG", "Ba cấu hình hiệu năng", "01"),
                 new LinearLayout.LayoutParams(0, dp(92), 1f));
         LinearLayout.LayoutParams gap = new LinearLayout.LayoutParams(0, dp(92), 1f);
         gap.leftMargin = dp(10);
-        gridA.addView(featureCard("FREELOOK", "Đổi góc nhìn", "02"), gap);
+        gridA.addView(featureCard("FUNCTIONS", "Chức năng trong game", "02"), gap);
         page.addView(gridA, top(10, dp(92)));
 
         LinearLayout gridB = new LinearLayout(this);
         gridB.setOrientation(LinearLayout.HORIZONTAL);
-        gridB.addView(featureCard("HOTKEYS", "Phím tắt trong game", "03"),
+        gridB.addView(featureCard("CONTROLS", "Map phím và vị trí nút", "03"),
                 new LinearLayout.LayoutParams(0, dp(92), 1f));
-        LinearLayout.LayoutParams mapGap = new LinearLayout.LayoutParams(0, dp(92), 1f);
-        mapGap.leftMargin = dp(10);
-        gridB.addView(featureCard("MAP PHÍM", "Tùy chỉnh điều khiển", "04"), mapGap);
+        LinearLayout.LayoutParams infoGap = new LinearLayout.LayoutParams(0, dp(92), 1f);
+        infoGap.leftMargin = dp(10);
+        gridB.addView(featureCard("RUNTIME", "Trạng thái Minecraft", "04"), infoGap);
         page.addView(gridB, top(10, dp(92)));
 
         page.addView(buildQuickActions(), top(18, -2));
@@ -92,7 +91,6 @@ public final class MainActivity extends Activity {
         page.addView(foot2, top(5, -2));
 
         refreshRuntime();
-        refreshHotkeyLabel();
     }
 
     private View buildHeader() {
@@ -182,32 +180,25 @@ public final class MainActivity extends Activity {
         TextView title = text("ĐIỀU KHIỂN WLZ", 11, TEXT, true);
         panel.addView(title);
 
-        TextView info = text("Chỉnh keybind và hotkey tại đây. Overlay trong game vẫn mở bằng nút tròn WLZ.",
+        TextView info = text(
+                "Map phím luôn sẵn sàng. Bật chức năng sẽ dùng ngay phím đã gán, không cần bật Hotkeys riêng.",
                 10, MUTED, false);
         info.setLineSpacing(dp(2), 1.0f);
         panel.addView(info, top(5, -2));
 
-        LinearLayout actions = new LinearLayout(this);
-        actions.setOrientation(LinearLayout.HORIZONTAL);
-
-        Button map = button("MAP PHÍM");
+        Button map = button("MAP PHÍM & VỊ TRÍ NÚT");
         map.setTextColor(TEXT);
         map.setBackground(round(PANEL_2, STROKE, 1, 12));
         map.setOnClickListener(v -> openKeyMapper());
-        actions.addView(map, new LinearLayout.LayoutParams(0, dp(44), 1f));
+        panel.addView(map, top(12, dp(44)));
 
-        hotkeyButton = button("HOTKEYS");
-        hotkeyButton.setTextColor(ORANGE);
-        hotkeyButton.setBackground(round(PANEL_2, STROKE, 1, 12));
-        hotkeyButton.setOnClickListener(v -> {
-            boolean enabled = WlzKeyMapper.areHotkeysEnabled(this);
-            WlzKeyMapper.setHotkeysEnabled(this, !enabled);
-            refreshHotkeyLabel();
-        });
-        LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(0, dp(44), 1f);
-        hp.leftMargin = dp(8);
-        actions.addView(hotkeyButton, hp);
-        panel.addView(actions, top(12, dp(44)));
+        Button functions = button("CHỨC NĂNG ĐANG HỖ TRỢ");
+        functions.setTextColor(ORANGE);
+        functions.setBackground(round(PANEL_2, STROKE, 1, 12));
+        functions.setOnClickListener(v -> Toast.makeText(this,
+                "Trong game, chạm nút tròn WLZ rồi mở tab Functions hoặc Controls.",
+                Toast.LENGTH_LONG).show());
+        panel.addView(functions, top(8, dp(44)));
         return panel;
     }
 
@@ -258,13 +249,6 @@ public final class MainActivity extends Activity {
             playButton.setText("RUNTIME CHƯA SẴN SÀNG");
             playButton.setAlpha(0.58f);
         }
-    }
-
-    private void refreshHotkeyLabel() {
-        if (hotkeyButton == null) return;
-        boolean enabled = WlzKeyMapper.areHotkeysEnabled(this);
-        hotkeyButton.setText(enabled ? "HOTKEYS  ✓" : "HOTKEYS  OFF");
-        hotkeyButton.setTextColor(enabled ? Color.rgb(106, 208, 138) : ORANGE);
     }
 
     private Button button(String title) {
