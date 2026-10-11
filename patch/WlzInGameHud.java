@@ -172,7 +172,15 @@ public final class WlzInGameHud {
         if (view instanceof TextView) {
             CharSequence value = ((TextView) view).getText();
             String text = value == null ? "" : value.toString().toLowerCase();
-            if (text.contains("apollon") && (text.contains("v6.6") || text.contains("chem") || text.contains("client"))) {
+            boolean originalApollonTitle = text.contains("apollon")
+                    && (text.contains("v6.6") || text.contains("chem") || text.contains("client"));
+            // The build's fixed-length branding pass rewrites the visible
+            // Apollon title before this detector runs. Recognize that exact
+            // replacement only when legacy module labels are also present.
+            boolean debrandedLegacyTitle = text.contains("wlz client")
+                    && (text.contains("v2.3.6") || text.contains("v2.3.5")
+                    || text.contains("android") || text.contains("minecraft"));
+            if (originalApollonTitle || debrandedLegacyTitle) {
                 markers.hasApollonTitle = true;
             }
             String[] moduleLabels = {
