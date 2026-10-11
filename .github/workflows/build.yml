@@ -70,7 +70,46 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
+      - name: Decide build source
+        id: source_mode
+        shell: bash
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$COMMIT_MESSAGE" == "Publish one direct APK from verified artifact" ]]; then
+            echo "reuse=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "reuse=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Reuse previously verified APK for direct publishing
+        if: steps.source_mode.outputs.reuse == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: WLZ-Client-2.3.6-APK
+          run-id: 38118766959
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          path: dist/reused
+
+      - name: Validate reused APK
+        if: steps.source_mode.outputs.reuse == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="dist/reused/WLZ-Client-2.3.6.apk"
+          test -s "$APK"
+          unzip -tq "$APK"
+          unzip -Z1 "$APK" | grep -q '^assets/'
+          unzip -Z1 "$APK" | grep -qx 'resources.arsc'
+          unzip -Z1 "$APK" | grep -qx 'lib/arm64-v8a/libminecraftpe.so'
+          mkdir -p dist
+          cp "$APK" dist/WLZ-Client-2.3.6.apk
+          sha256sum dist/WLZ-Client-2.3.6.apk | tee dist/SHA256SUMS.txt
+          echo "Reused previously signature-verified full client APK for a direct single-file release."
+
       - name: Download complete Minecraft base APK
+        if: steps.source_mode.outputs.reuse != 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -386,17 +425,20 @@ jobs:
           echo "Full base APK structure verified; continuing to final packaging."
 
       - name: Setup Android SDK build tools
+        if: steps.source_mode.outputs.reuse != 'true'
         uses: android-actions/setup-android@v4
         with:
           packages: 'platform-tools build-tools;35.0.0 platforms;android-35'
 
       - name: Setup Java 17 for final packaging
+        if: steps.source_mode.outputs.reuse != 'true'
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Prepare embedded Minecraft build
+        if: steps.source_mode.outputs.reuse != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -436,9 +478,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: WLZ-Client-2.3.6-APK
-          path: |
-            dist/WLZ-Client-2.3.6.apk
-            dist/SHA256SUMS.txt
+          path: dist/WLZ-Client-2.3.6.apk
           if-no-files-found: error
 
       - name: Publish one direct APK download
