@@ -698,29 +698,30 @@ public final class WlzInGameHud {
     }
 
     private void applyUnlockFps() {
-        if (!WlzModuleManager.isModuleEnabled(activity, 3)) return;
-
         try {
             Window window = activity.getWindow();
             WindowManager.LayoutParams lp = window.getAttributes();
+            Display display = activity.getWindowManager().getDefaultDisplay();
+            if (display == null) return;
 
-            if (Build.VERSION.SDK_INT >= 23) {
-                Display display = activity.getWindowManager().getDefaultDisplay();
-                if (display != null) {
-                    if (Build.VERSION.SDK_INT >= 30) {
-                        Display.Mode best = null;
-                        for (Display.Mode mode : display.getSupportedModes()) {
-                            if (best == null || mode.getRefreshRate() > best.getRefreshRate()) {
-                                best = mode;
-                            }
-                        }
-                        if (best != null) lp.preferredDisplayModeId = best.getModeId();
+            if (WlzModuleManager.isModuleEnabled(activity, 3)) {
+                if (Build.VERSION.SDK_INT >= 30) {
+                    Display.Mode best = null;
+                    for (Display.Mode mode : display.getSupportedModes()) {
+                        if (best == null || mode.getRefreshRate() > best.getRefreshRate()) best = mode;
                     }
-                    lp.preferredRefreshRate = Math.max(lp.preferredRefreshRate, maxRefreshRate(display));
-                    window.setAttributes(lp);
+                    if (best != null) lp.preferredDisplayModeId = best.getModeId();
                 }
+                lp.preferredRefreshRate = maxRefreshRate(display);
+            } else {
+                // Reset preferences when the switch is turned off rather than
+                // leaving the last requested high refresh rate pinned.
+                lp.preferredDisplayModeId = 0;
+                lp.preferredRefreshRate = 0f;
             }
-        } catch (Throwable ignored) {
+            window.setAttributes(lp);
+        } catch (Throwable error) {
+            Log.w("WLZRuntime", "Could not apply display refresh preference", error);
         }
     }
 
