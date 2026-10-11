@@ -396,18 +396,18 @@ jobs:
             -alias wlz -keyalg RSA -keysize 2048 -validity 10000 \
             -dname "CN=WLZ Client,O=WLZ"
           "${APKSIGNER}" sign --ks dist/wlz-ci.jks --ks-pass pass:wlzclient \
-            --key-pass pass:wlzclient --out dist/WLZ-Client-2.3.5.apk \
+            --key-pass pass:wlzclient --out dist/WLZ-Client-2.3.6.apk \
             dist/WLZ-Minecraft-aligned.apk
-          "${APKSIGNER}" verify --verbose dist/WLZ-Client-2.3.5.apk
+          "${APKSIGNER}" verify --verbose dist/WLZ-Client-2.3.6.apk
 
-          BADGING="$("${AAPT2}" dump badging dist/WLZ-Client-2.3.5.apk)"
+          BADGING="$("${AAPT2}" dump badging dist/WLZ-Client-2.3.6.apk)"
           printf '%s\n' "$BADGING" | grep -q "package: name='com.wlzclient.launcher'"
-          unzip -tq dist/WLZ-Client-2.3.5.apk
-          unzip -Z1 dist/WLZ-Client-2.3.5.apk | grep -q '^assets/'
-          unzip -Z1 dist/WLZ-Client-2.3.5.apk | grep -qx 'resources.arsc'
-          unzip -Z1 dist/WLZ-Client-2.3.5.apk | grep -qx 'lib/arm64-v8a/libminecraftpe.so'
-          test -s dist/WLZ-Client-2.3.5.apk
-          sha256sum dist/WLZ-Client-2.3.5.apk | tee dist/SHA256SUMS.txt
+          unzip -tq dist/WLZ-Client-2.3.6.apk
+          unzip -Z1 dist/WLZ-Client-2.3.6.apk | grep -q '^assets/'
+          unzip -Z1 dist/WLZ-Client-2.3.6.apk | grep -qx 'resources.arsc'
+          unzip -Z1 dist/WLZ-Client-2.3.6.apk | grep -qx 'lib/arm64-v8a/libminecraftpe.so'
+          test -s dist/WLZ-Client-2.3.6.apk
+          sha256sum dist/WLZ-Client-2.3.6.apk | tee dist/SHA256SUMS.txt
 
       - name: Show artifacts
         run: find dist -maxdepth 1 -type f -printf '%f %s bytes\n' | sort
@@ -415,8 +415,8 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: WLZ-Client-2.3.5-APK
+          name: WLZ-Client-2.3.6-APK
           path: |
-            dist/WLZ-Client-2.3.5.apk
+            dist/WLZ-Client-2.3.6.apk
             dist/SHA256SUMS.txt
           if-no-files-found: error
