@@ -382,6 +382,8 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           python3 patch/embed_minecraft.py --input minecraft_input --wlz-apk app/build/outputs/apk/debug/app-debug.apk --out dist/WLZ-Minecraft-unsigned.apk
+          python3 -m py_compile patch/branding_and_runtime.py
+          python3 patch/branding_and_runtime.py dist/WLZ-Minecraft-unsigned.apk
 
           BT="$(ls -1 "${ANDROID_HOME}/build-tools" | sort -V | tail -n 1)"
           ZIPALIGN="${ANDROID_HOME}/build-tools/${BT}/zipalign"
