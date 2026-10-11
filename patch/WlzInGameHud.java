@@ -74,6 +74,9 @@ public final class WlzInGameHud {
 
     private long frameWindowStart = System.nanoTime();
     private int frameCount;
+    private boolean originalDisplayPrefsCaptured;
+    private int originalPreferredDisplayModeId;
+    private float originalPreferredRefreshRate;
 
     private WlzInGameHud(Activity activity) {
         this.activity = activity;
@@ -765,6 +768,11 @@ public final class WlzInGameHud {
         try {
             Window window = activity.getWindow();
             WindowManager.LayoutParams lp = window.getAttributes();
+            if (!originalDisplayPrefsCaptured) {
+                originalPreferredDisplayModeId = lp.preferredDisplayModeId;
+                originalPreferredRefreshRate = lp.preferredRefreshRate;
+                originalDisplayPrefsCaptured = true;
+            }
             Display display = activity.getWindowManager().getDefaultDisplay();
             if (display == null) return;
 
@@ -780,8 +788,8 @@ public final class WlzInGameHud {
             } else {
                 // Reset preferences when the switch is turned off rather than
                 // leaving the last requested high refresh rate pinned.
-                lp.preferredDisplayModeId = 0;
-                lp.preferredRefreshRate = 0f;
+                lp.preferredDisplayModeId = originalPreferredDisplayModeId;
+                lp.preferredRefreshRate = originalPreferredRefreshRate;
             }
             window.setAttributes(lp);
         } catch (Throwable error) {
