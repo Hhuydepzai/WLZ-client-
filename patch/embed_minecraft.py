@@ -618,6 +618,24 @@ def inject(helper, base, out):
             out_entries[name] = entry
             existing.add(name)
 
+    # Merge only namespaced WLZ assets. Never replace Minecraft's own assets,
+    # resource table, or files with colliding names.
+    wlz_assets = [
+        name for name in helper_entries
+        if name in {"assets/wlz_logo.png", "assets/wlz_app_icon.png"}
+        or name.startswith("assets/wlz_packs/")
+    ]
+    for name in wlz_assets:
+        out_entries[name] = helper_entries[name]
+        existing.add(name)
+    print(
+        "Embedded WLZ assets:",
+        len(wlz_assets),
+        "resource packs:",
+        sum(name.startswith("assets/wlz_packs/") for name in wlz_assets),
+        flush=True,
+    )
+
     write_zip(out_entries, out)
 
 
