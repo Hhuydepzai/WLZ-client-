@@ -24,6 +24,11 @@ public final class WlzKeyMapper {
 
     private WlzKeyMapper() {}
 
+    /** Only expose actions that have a verified Java or native implementation. */
+    public static boolean isActionImplemented(int action) {
+        return action == 0 || action == 1 || action == 3 || action == 4 || action == 8;
+    }
+
     public static int getKey(Context context, int action) {
         if (action < 0 || action >= ACTIONS.length) return KeyEvent.KEYCODE_UNKNOWN;
         return prefs(context).getInt("key_" + action, DEFAULT_KEYS[action]);
@@ -55,7 +60,7 @@ public final class WlzKeyMapper {
 
     public static boolean trigger(Context context, int keyCode) {
         for (int i = 0; i < ACTIONS.length; i++) {
-            if (getKey(context, i) != keyCode) continue;
+            if (!isActionImplemented(i) || getKey(context, i) != keyCode) continue;
             // Let the game handle keys bound to modules that are not ported to
             // this runtime; do not swallow input for a feature that cannot run.
             if (!WlzModuleManager.isModuleSupported(context, i)) return false;
