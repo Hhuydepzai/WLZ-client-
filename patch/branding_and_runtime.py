@@ -113,7 +113,7 @@ def make_wlz_icon_png(size: int) -> bytes:
         raw.append(0)  # PNG filter: None
         raw.extend(pixels[y * size * 4:(y + 1) * size * 4])
     header = struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0)
-    return (b"\\x89PNG\\r\\n\\x1a\\n" + _png_chunk(b"IHDR", header)
+    return (b"\x89PNG\r\n\x1a\n" + _png_chunk(b"IHDR", header)
             + _png_chunk(b"IDAT", zlib.compress(bytes(raw), 9)) + _png_chunk(b"IEND", b""))
 
 
