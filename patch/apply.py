@@ -62,6 +62,7 @@ for name in [
     "WlzKeyMapper.java",
     "WlzControlEditorActivity.java",
     "WlzInGameHud.java",
+    "WlzLagPackManager.java",
 ]:
     copy(name, JAVA / name)
 
@@ -71,5 +72,23 @@ copy("AndroidManifest.xml", APP / "src/main/AndroidManifest.xml")
 copy("styles.xml", VALUES / "styles.xml")
 copy("wlz_icon.xml", RES / "wlz_icon.xml")
 copy("wlz_splash.xml", RES / "wlz_splash.xml")
+
+# If pack payloads are present in the source tree, bundle them into the helper APK.
+# The embed step also copies these namespaced assets into the final Minecraft APK.
+source_assets = Path("patch/assets")
+target_assets = APP / "src/main/assets"
+for rel in [
+    Path("wlz_logo.png"),
+    Path("wlz_app_icon.png"),
+    Path("wlz_packs/common_a.mcpack"),
+    Path("wlz_packs/common_b.mcpack"),
+    Path("wlz_packs/fixlag2.mcpack"),
+    Path("wlz_packs/fixlag3.mcpack"),
+]:
+    source = source_assets / rel
+    if source.is_file():
+        target = target_assets / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, target)
 
 print("WLZ single-app patch applied")
