@@ -13,8 +13,13 @@ public final class WlzModuleManager {
     private WlzModuleManager() {}
 
     public static boolean isModuleSupported(Context context, int index) {
-        if (index == 8) return true;
-        if (index < 0 || index >= MODULE_COUNT || !nativeStarted) return false;
+        // These two features are implemented entirely in Java and do not require
+        // native patching. Keeping them available also avoids pretending that
+        // a native capability exists when it does not.
+        if (index == 3 || index == 8) return true;
+        if (index < 0 || index >= MODULE_COUNT) return false;
+        if (!nativeStarted) initializeNative(context);
+        if (!nativeStarted) return false;
         try { return WlzRuntimeBridge.nativeIsModuleSupported(index); }
         catch (Throwable e) { return false; }
     }
@@ -27,16 +32,17 @@ public final class WlzModuleManager {
     public static void setModuleEnabled(Context context, int index, boolean enabled) {
         if (index < 0 || index >= MODULE_COUNT) return;
 
-        if (index != 8 && !nativeStarted) initializeNative(context);
-
-        if (index != 8 && !isModuleSupported(context, index)) {
+        // Index 3 (refresh-rate preference) and index 8 (FPS counter) are Java
+        // features. Never route them through a native hook that does not exist.
+        final boolean javaOnly = index == 3 || index == 8;
+        if (!javaOnly && !nativeStarted) initializeNative(context);
+        if (!javaOnly && !isModuleSupported(context, index)) {
             Log.w(TAG, "Ignoring unsupported module index=" + index);
             return;
         }
 
         prefs(context).edit().putBoolean("m_" + index, enabled).apply();
-
-        if (nativeStarted) {
+        if (!javaOnly && nativeStarted) {
             try { WlzRuntimeBridge.nativeSetModule(index, enabled); }
             catch (Throwable e) { Log.w(TAG, "nativeSetModule failed for index=" + index, e); }
         }
