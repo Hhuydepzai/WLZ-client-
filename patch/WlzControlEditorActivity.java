@@ -54,7 +54,7 @@ public final class WlzControlEditorActivity extends Activity {
         head.addView(back, lp(dp(100), dp(40)));
         page.addView(head);
 
-        captureStatus = text("Chạm MAP rồi bấm phím OTG để gán.", 9, MUTED, false);
+        captureStatus = text("Chọn MAP rồi bấm phím để gán. Chức năng đã bật sẽ có nút trên HUD.", 9, MUTED, false);
         page.addView(captureStatus, top(5));
 
         page.addView(text("Kéo nút để đổi vị trí. Hotkey tự hoạt động theo module, không cần bật riêng.", 9, MUTED, false), top(8));
@@ -76,8 +76,8 @@ public final class WlzControlEditorActivity extends Activity {
         FrameLayout canvas = new FrameLayout(this);
         canvas.setBackground(round(PANEL, STROKE, 1, 16));
 
-        String[] labels = {"ZOOM", "LOOK", "FPS", "BRIGHT", "MENU"};
-        int[] actions = {0, 1, 8, 4, -1};
+        String[] labels = {"ZOOM", "LOOK", "UNLOCK", "BRIGHT", "FPS"};
+        int[] actions = {0, 1, 3, 4, 8};
         for (int i = 0; i < labels.length; i++) {
             Button b = touchButton(labels[i], actions[i]);
             FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(dp(78), dp(48));
@@ -178,7 +178,10 @@ public final class WlzControlEditorActivity extends Activity {
                 build();
                 return true;
             }
-            if (WlzKeyMapper.trigger(this, event.getKeyCode())) return true;
+            if (WlzKeyMapper.trigger(this, event.getKeyCode())) {
+                WlzInGameHud.refreshAllVisuals();
+                return true;
+            }
         }
         return super.dispatchKeyEvent(event);
     }
