@@ -12,6 +12,8 @@ import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
+import android.util.Log;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
@@ -24,10 +26,13 @@ import android.widget.TextView;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public final class WlzInGameHud {
+    private static final String HUD_TAG = "com.wlz.client.HUD_LAYER";
     private static final Map<Activity, WlzInGameHud> ACTIVE = new HashMap<Activity, WlzInGameHud>();
 
     private static final int ORANGE = Color.rgb(255, 112, 0);
@@ -62,8 +67,9 @@ public final class WlzInGameHud {
 
     private WlzInGameHud(Activity activity) {
         this.activity = activity;
-        this.decor = (FrameLayout) activity.getWindow().getDecorView();
+        this.decor = resolveDecor(activity);
         this.layer = new FrameLayout(activity);
+        layer.setTag(HUD_TAG);
         layer.setClipChildren(false);
         layer.setClipToPadding(false);
         decor.addView(layer, new FrameLayout.LayoutParams(-1, -1));
@@ -84,23 +90,52 @@ public final class WlzInGameHud {
         if (!"com.mojang.minecraftpe.MainActivity".equals(activity.getClass().getName())) return;
 
         activity.runOnUiThread(() -> {
-            if (!ACTIVE.containsKey(activity)) {
-                ACTIVE.put(activity, new WlzInGameHud(activity));
+            try {
+                synchronized (ACTIVE) {
+                    if (ACTIVE.containsKey(activity)) return;
+                    View root = activity.getWindow() == null ? null : activity.getWindow().getDecorView();
+                    if (root instanceof ViewGroup && ((ViewGroup) root).findViewWithTag(HUD_TAG) != null) return;
+                    ACTIVE.put(activity, new WlzInGameHud(activity));
+                }
+            } catch (Throwable error) {
+                Log.e("WLZRuntime", "HUD attach failed; continuing without overlay", error);
             }
         });
     }
 
+    private static FrameLayout resolveDecor(Activity activity) {
+        View root = activity.getWindow() == null ? null : activity.getWindow().getDecorView();
+        if (root instanceof FrameLayout) return (FrameLayout) root;
+        View content = activity.findViewById(android.R.id.content);
+        if (content instanceof FrameLayout) return (FrameLayout) content;
+        throw new IllegalStateException("No FrameLayout available for WLZ overlay");
+    }
+
     public static void detach(Activity activity) {
-        WlzInGameHud hud = ACTIVE.remove(activity);
-        if (hud != null) hud.close();
+        WlzInGameHud hud;
+        synchronized (ACTIVE) {
+            hud = ACTIVE.remove(activity);
+        }
+        if (hud != null) {
+            try {
+                hud.close();
+            } catch (Throwable error) {
+                Log.w("WLZRuntime", "HUD cleanup failed", error);
+            }
+        }
     }
 
     public static void refreshAllHotkeys() {
-        for (WlzInGameHud hud : ACTIVE.values()) {
-            if (WlzKeyMapper.areHotkeysEnabled(hud.activity)) {
-                hud.installKeyHook();
-            } else {
-                hud.restoreKeyHook();
+        final List<WlzInGameHud> snapshot;
+        synchronized (ACTIVE) {
+            snapshot = new ArrayList<WlzInGameHud>(ACTIVE.values());
+        }
+        for (WlzInGameHud hud : snapshot) {
+            try {
+                if (WlzKeyMapper.areHotkeysEnabled(hud.activity)) hud.installKeyHook();
+                else hud.restoreKeyHook();
+            } catch (Throwable error) {
+                Log.w("WLZRuntime", "Hotkey refresh failed", error);
             }
         }
     }
