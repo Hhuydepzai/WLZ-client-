@@ -72,14 +72,27 @@ public final class WlzLogoView extends View {
             line.setStrokeWidth(dp(Math.max(2, size * 0.035f)));
             canvas.drawCircle(cx, cy, r - dp(2), line);
 
-            text.setTextSize(size * 0.27f);
+            // Small crown + wordmark keeps the in-game floating button
+            // recognizable at 64-72dp without relying on external assets.
+            Path crown = new Path();
+            crown.moveTo(cx - size * 0.21f, cy - size * 0.31f);
+            crown.lineTo(cx - size * 0.10f, cy - size * 0.19f);
+            crown.lineTo(cx, cy - size * 0.33f);
+            crown.lineTo(cx + size * 0.10f, cy - size * 0.19f);
+            crown.lineTo(cx + size * 0.21f, cy - size * 0.31f);
+            crown.lineTo(cx + size * 0.16f, cy - size * 0.12f);
+            crown.lineTo(cx - size * 0.16f, cy - size * 0.12f);
+            crown.close();
+            canvas.drawPath(crown, orange);
+
+            text.setTextSize(size * 0.25f);
             Paint.FontMetrics fm = text.getFontMetrics();
-            float base = cy - (fm.ascent + fm.descent) * 0.5f;
+            float base = cy + size * 0.055f - (fm.ascent + fm.descent) * 0.5f;
             canvas.drawText("WLZ", cx, base, text);
 
             Path slash = new Path();
-            slash.moveTo(cx - size * 0.23f, cy + size * 0.21f);
-            slash.lineTo(cx + size * 0.23f, cy + size * 0.21f);
+            slash.moveTo(cx - size * 0.23f, cy + size * 0.24f);
+            slash.lineTo(cx + size * 0.23f, cy + size * 0.24f);
             line.setStrokeWidth(dp(Math.max(2, size * 0.028f)));
             canvas.drawPath(slash, line);
             return;
