@@ -1,12 +1,16 @@
 package com.wlz.client;
 
 import android.app.Activity;
+import android.content.ClipData;
 import android.content.ComponentName;
 import android.content.Intent;
+import android.database.Cursor;
+import android.net.Uri;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.provider.OpenableColumns;
 import android.view.Gravity;
 import android.view.View;
 import android.view.Window;
@@ -17,8 +21,13 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.Locale;
+
 public final class MainActivity extends Activity {
     private static final String MC_ACTIVITY = "com.mojang.minecraftpe.MainActivity";
+    private static final int REQUEST_IMPORT_FIXLAG_PACKS = 2606;
     private static final int BG = Color.rgb(8, 9, 12);
     private static final int PANEL = Color.rgb(18, 20, 25);
     private static final int PANEL_2 = Color.rgb(24, 27, 33);
@@ -199,7 +208,100 @@ public final class MainActivity extends Activity {
                 "Trong game, chạm nút tròn WLZ rồi mở tab Functions hoặc Controls.",
                 Toast.LENGTH_LONG).show());
         panel.addView(functions, top(8, dp(44)));
+
+        if (!WlzLagPackManager.isBundled(this)) {
+            TextView packInfo = text(
+                    "Cần nhập 4 pack Fix Lag một lần. Sau đó WLZ tự cài và áp dụng profile, không cần Global Resources.",
+                    9, MUTED, false);
+            packInfo.setLineSpacing(dp(2), 1f);
+            panel.addView(packInfo, top(12, -2));
+
+            Button importPacks = button("NHẬP 4 PACK FIX LAG (MỘT LẦN)");
+            importPacks.setTextColor(TEXT);
+            importPacks.setBackground(round(PANEL_2, ORANGE, 1, 12));
+            importPacks.setOnClickListener(v -> chooseFixLagPacks());
+            panel.addView(importPacks, top(7, dp(44)));
+        }
         return panel;
+    }
+
+    private void chooseFixLagPacks() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+        intent.putExtra(Intent.EXTRA_MIME_TYPES,
+                new String[]{"application/zip", "application/octet-stream"});
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        try {
+            startActivityForResult(intent, REQUEST_IMPORT_FIXLAG_PACKS);
+        } catch (Throwable error) {
+            Toast.makeText(this, "Không mở được trình chọn file.", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQUEST_IMPORT_FIXLAG_PACKS || resultCode != RESULT_OK || data == null) return;
+
+        ArrayList<Uri> selected = new ArrayList<Uri>();
+        ClipData clip = data.getClipData();
+        if (clip != null) {
+            for (int i = 0; i < clip.getItemCount(); i++) {
+                Uri uri = clip.getItemAt(i).getUri();
+                if (uri != null) selected.add(uri);
+            }
+        } else if (data.getData() != null) {
+            selected.add(data.getData());
+        }
+
+        int imported = 0;
+        for (Uri uri : selected) {
+            String displayName = getDisplayName(uri);
+            String canonical = canonicalFixLagName(displayName);
+            if (canonical == null) continue;
+            try {
+                InputStream stream = getContentResolver().openInputStream(uri);
+                WlzLagPackManager.importPack(this, canonical, stream);
+                imported++;
+            } catch (Throwable error) {
+                Toast.makeText(this, "Không nhập được " + displayName, Toast.LENGTH_LONG).show();
+            }
+        }
+
+        if (WlzLagPackManager.isBundled(this)) {
+            Toast.makeText(this,
+                    "Đã lưu đủ 4 pack. Vào Minecraft → Fix Lag 1/2/3 để tự áp dụng.",
+                    Toast.LENGTH_LONG).show();
+        } else {
+            Toast.makeText(this,
+                    "Đã nhập " + imported + " pack ở lượt này. Hãy chọn đủ 4 file: 2 pack chung, fixlag2.mcpack và fixlag3.mcpack.",
+                    Toast.LENGTH_LONG).show();
+        }
+        recreate();
+    }
+
+    private String getDisplayName(Uri uri) {
+        try (Cursor cursor = getContentResolver().query(
+                uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                int col = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                if (col >= 0) return cursor.getString(col);
+            }
+        } catch (Throwable ignored) {}
+        String path = uri == null ? "" : uri.getLastPathSegment();
+        return path == null ? "" : path;
+    }
+
+    private String canonicalFixLagName(String displayName) {
+        if (displayName == null) return null;
+        String name = displayName.trim().toLowerCase(Locale.ROOT);
+        if (name.equals("fixlag2.mcpack")) return "fixlag2.mcpack";
+        if (name.equals("fixlag3.mcpack")) return "fixlag3.mcpack";
+        if (name.startsWith("fixlag chung cho 2 bản2")) return "common_b.mcpack";
+        if (name.startsWith("fixlag chung cho 2 bản")) return "common_a.mcpack";
+        return null;
     }
 
     private void launchMinecraft() {
