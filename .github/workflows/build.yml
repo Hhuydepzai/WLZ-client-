@@ -128,14 +128,19 @@ jobs:
               "https://files2.cdn9mc.com/dl2.php?file=Apollon-Client-MCPE-26.51-64bit.apk" \
               > /tmp/wlz-candidates.txt
             found=0
+            # Bound direct resolution. Some shorteners expose many ad/font
+            # assets; a dead resource must not stall an APK build for 30 minutes.
+            direct_deadline=$((SECONDS + 150))
             for depth in 1 2 3 4; do
               [ -s /tmp/wlz-candidates.txt ] || break
+              [ "$SECONDS" -lt "$direct_deadline" ] || { echo "Direct resolver deadline reached; switching to browser fallback."; break; }
               : > /tmp/wlz-next-candidates.txt
               while IFS= read -r candidate_url; do
                 [ -n "${candidate_url}" ] || continue
+                [ "$SECONDS" -lt "$direct_deadline" ] || break
                 echo "Resolving download source (hop ${depth}): ${candidate_url}"
-                if ! curl -fL --retry 2 --retry-delay 2 \
-                    --connect-timeout 30 --max-time 1800 \
+                if ! curl -fL --retry 1 --retry-delay 1 \
+                    --connect-timeout 10 --max-time 30 \
                     --user-agent "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128 Safari/537.36" \
                     -e "https://t.me/" \
                     "${candidate_url}" -o /tmp/wlz-candidate.bin; then
@@ -188,15 +193,30 @@ jobs:
                   found.append(urljoin(base, match))
               except ValueError:
                   continue
-          clean, seen = [], set()
-          blocked = ("doubleclick.net", "googlesyndication.com", "adf.ly", "linkvertise.com", "w3.org", "cloudfront.net", "ggclicker.com")
-          for u in found:
-              u = u.strip(" \t\r\n'\"<>),;")
+          blocked = (
+              "doubleclick.net", "googlesyndication.com", "adf.ly",
+              "linkvertise.com", "w3.org", "cloudfront.net", "ggclicker.com",
+              "fonts.gstatic.com", "fonts.googleapis.com", "gstatic.com",
+              "googletagmanager.com", "google-analytics.com", "jsdelivr.com",
+              "yandex.ru", "yastatic.net", "surunzi.com", "ko-fi.com",
+              "spadsync.com", "paypal.com", "paypalobjects.com"
+          )
+          def priority(u):
               parsed = urlparse(u)
-              if parsed.scheme not in ("http", "https") or not parsed.netloc: continue
-              if any(host in parsed.netloc.lower() for host in blocked): continue
-              if u not in seen and len(clean) < 20:
-                  seen.add(u); clean.append(u)
+              host = parsed.netloc.lower()
+              text = (host + parsed.path + "?" + parsed.query).lower()
+              if any(bad in host for bad in blocked): return -1
+              if parsed.scheme not in ("http", "https") or not parsed.netloc: return -1
+              if parsed.path.lower().endswith((".js", ".css", ".woff", ".woff2", ".ttf", ".svg", ".png", ".jpg", ".jpeg", ".ico", ".webp", ".gif")): return -1
+              score = 0
+              if "cdn9mc.com" in host: score += 100
+              if "dl2.php" in parsed.path.lower(): score += 80
+              if "download" in text or "apk" in text or "file=" in text: score += 45
+              if "linkify.ru" in host: score += 15
+              if "download" in parsed.path.lower(): score += 20
+              return score
+          unique = list(dict.fromkeys(u.strip(" \t\r\n'\"<>),;") for u in found))
+          clean = sorted((u for u in unique if priority(u) > 0), key=priority, reverse=True)[:12]
           print("\n".join(clean))
           PY
                 rm -f /tmp/wlz-candidate.bin
