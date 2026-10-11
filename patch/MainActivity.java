@@ -131,8 +131,7 @@ public final class MainActivity extends Activity {
         eyebrow.setLetterSpacing(0.10f);
         card.addView(eyebrow);
 
-        TextView headline = text("SẴN SÀNG
-VÀO GAME?", 27, TEXT, true);
+        TextView headline = text("SẴN SÀNG\nVÀO GAME?", 27, TEXT, true);
         headline.setLineSpacing(0f, 0.94f);
         card.addView(headline, top(7, -2));
 
