@@ -57,6 +57,7 @@ public final class WlzInGameHud {
     private TextView fpsText;
     private FrameLayout radialMenu;
     private LinearLayout keyMapperPanel;
+    private final Map<Integer, Button> floatingActions = new HashMap<Integer, Button>();
     private LinearLayout categoryNav;
     private FrameLayout categoryContent;
     private boolean radialVisible;
@@ -692,10 +693,64 @@ public final class WlzInGameHud {
         });
     }
 
+    public static void refreshAllVisuals() {
+        final List<WlzInGameHud> snapshot;
+        synchronized (ACTIVE) {
+            snapshot = new ArrayList<WlzInGameHud>(ACTIVE.values());
+        }
+        for (WlzInGameHud hud : snapshot) {
+            try { hud.applyVisuals(); }
+            catch (Throwable error) { Log.w("WLZRuntime", "HUD visual refresh failed", error); }
+        }
+    }
+
     private void applyVisuals() {
         applyUnlockFps();
+        refreshFloatingActionButtons();
         if (WlzModuleManager.isModuleEnabled(activity, 8)) startFps();
         else stopFps();
+    }
+
+    private void refreshFloatingActionButtons() {
+        for (Button old : floatingActions.values()) {
+            try { layer.removeView(old); } catch (Throwable ignored) {}
+        }
+        floatingActions.clear();
+
+        final int[] modules = {0, 1, 3, 4, 8};
+        final int[] slots = {0, 1, 2, 3, 4};
+        final String[] labels = {"ZOOM", "LOOK", "UNLOCK", "BRIGHT", "FPS"};
+        SharedPreferences controls = activity.getSharedPreferences("wlz_controls", Activity.MODE_PRIVATE);
+        int width = Math.max(1, decor.getWidth());
+        int height = Math.max(1, decor.getHeight());
+
+        for (int i = 0; i < modules.length; i++) {
+            final int module = modules[i];
+            if (!WlzModuleManager.isModuleEnabled(activity, module)
+                    || !WlzModuleManager.isModuleSupported(activity, module)) continue;
+
+            Button control = button(labels[i]);
+            control.setTextSize(9);
+            control.setBackground(round(Color.argb(225, 14, 15, 19), ORANGE, 2, 14));
+            control.setTextColor(ORANGE_LIGHT);
+            control.setOnClickListener(v -> toggleModule(module));
+
+            int slot = slots[i];
+            int buttonWidth = dp(72);
+            int buttonHeight = dp(42);
+            int defaultX = dp(14 + (slot % 3) * 92);
+            int defaultY = dp(16 + (slot / 3) * 70);
+            int x = controls.getInt("x_" + slot, defaultX);
+            int y = controls.getInt("y_" + slot, defaultY);
+            x = Math.max(0, Math.min(x, Math.max(0, width - buttonWidth)));
+            y = Math.max(0, Math.min(y, Math.max(0, height - buttonHeight)));
+
+            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(buttonWidth, buttonHeight);
+            params.leftMargin = x;
+            params.topMargin = y;
+            layer.addView(control, params);
+            floatingActions.put(module, control);
+        }
     }
 
     private void applyUnlockFps() {
