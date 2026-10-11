@@ -20,7 +20,9 @@ from pathlib import Path
 
 BRAND = [
     (b"Apollon Client v6.6", b"WLZ Client v2.3.5  "),
+    (b"Apollon Chem v6.6", b"WLZ Client v2.3.5"),
     (b"Apollon Client", b"WLZ Client    "),
+    (b"Apollon Chem", b"WLZ Client  "),
 ]
 PACKAGE_PATHS = [
     (b"Android/data/com.mojang.minecraftpe", b"Android/data/com.wlzclient.launcher"),
@@ -100,7 +102,11 @@ def patch_apk(path: Path) -> dict:
             if Path(name).suffix.lower() not in SCAN_SUFFIXES:
                 continue
             data = check.read(name)
-            if b"Apollon Client v6.6" in data or b"Apollon Client" in data:
+            old_brand_strings = (
+                b"Apollon Client v6.6", b"Apollon Client",
+                b"Apollon Chem v6.6", b"Apollon Chem",
+            )
+            if any(token in data for token in old_brand_strings):
                 remaining.append(name)
         if brand_count == 0:
             raise SystemExit("No Apollon Client title string was found in scanned runtime files; refusing to claim debranding succeeded.")
