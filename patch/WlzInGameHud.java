@@ -56,8 +56,16 @@ public final class WlzInGameHud {
     private TextView fpsText;
     private FrameLayout radialMenu;
     private LinearLayout keyMapperPanel;
+    private LinearLayout categoryNav;
+    private FrameLayout categoryContent;
     private boolean radialVisible;
+    private int selectedCategory = 0;
     private int captureAction = -1;
+
+    private static final String[] GUI_CATEGORIES = {
+            "Movement", "Combat", "Building", "Visuals",
+            "Fix Lag", "Controls", "Other", "Info"
+    };
 
     private Window.Callback originalCallback;
     private Window.Callback callbackProxy;
@@ -81,7 +89,9 @@ public final class WlzInGameHud {
         layer.addView(circle, cp);
         makeDraggable(circle, cp);
 
-        if (WlzKeyMapper.areHotkeysEnabled(activity)) installKeyHook();
+        // Key mapping is always active; each bound key acts only when its
+        // corresponding module is available in this runtime.
+        installKeyHook();
         applyVisuals();
     }
 
@@ -214,8 +224,7 @@ public final class WlzInGameHud {
         }
         for (WlzInGameHud hud : snapshot) {
             try {
-                if (WlzKeyMapper.areHotkeysEnabled(hud.activity)) hud.installKeyHook();
-                else hud.restoreKeyHook();
+                hud.installKeyHook();
             } catch (Throwable error) {
                 Log.w("WLZRuntime", "Hotkey refresh failed", error);
             }
@@ -299,89 +308,239 @@ public final class WlzInGameHud {
     private void openRadialMenu() {
         closeRadialMenu();
         radialVisible = true;
+        int availableW = Math.max(dp(320), decor.getWidth() - dp(24));
+        int availableH = Math.max(dp(300), decor.getHeight() - dp(24));
+        int width = Math.min(dp(820), availableW);
+        int height = Math.min(dp(560), availableH);
 
-        final int size = dp(250);
         radialMenu = new FrameLayout(activity);
-        radialMenu.setBackground(circleBackground());
+        radialMenu.setBackground(round(Color.argb(248, 10, 11, 15), ORANGE, 2, 16));
+        radialMenu.setClipChildren(true);
 
-        FrameLayout.LayoutParams cp = (FrameLayout.LayoutParams) circle.getLayoutParams();
-        int cx = cp.leftMargin + circle.getWidth() / 2;
-        int cy = cp.topMargin + circle.getHeight() / 2;
+        FrameLayout.LayoutParams panelParams = new FrameLayout.LayoutParams(width, height);
+        panelParams.gravity = Gravity.CENTER;
+        layer.addView(radialMenu, panelParams);
 
-        FrameLayout.LayoutParams rp = new FrameLayout.LayoutParams(size, size);
-        rp.leftMargin = Math.max(0, Math.min(cx - size / 2, Math.max(0, decor.getWidth() - size)));
-        rp.topMargin = Math.max(0, Math.min(cy - size / 2, Math.max(0, decor.getHeight() - size)));
+        LinearLayout column = new LinearLayout(activity);
+        column.setOrientation(LinearLayout.VERTICAL);
+        column.setPadding(dp(12), dp(10), dp(12), dp(12));
+        radialMenu.addView(column, new FrameLayout.LayoutParams(-1, -1));
 
-        layer.addView(radialMenu, 0, rp);
+        LinearLayout header = new LinearLayout(activity);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        TextView title = text("WLZ CLIENT  •  CLICKGUI", 15, ORANGE, true);
+        header.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
+        Button close = button("✕");
+        close.setTextColor(ORANGE);
+        close.setBackground(round(ROW, STROKE, 1, 10));
+        close.setOnClickListener(v -> closeRadialMenu());
+        header.addView(close, lp(dp(44), dp(40)));
+        column.addView(header, top(0));
 
-        addRadialButton("ZOOM", 0, size / 2, dp(17), () -> toggleModule(0));
-        addRadialButton("LOOK", 1, size - dp(42), size / 2 - dp(21), () -> toggleModule(1));
-        addRadialButton("FPS", 3, size / 2 - dp(29), size - dp(54), () -> toggleModule(3));
-        addRadialButton("BRIGHT", 4, dp(13), size / 2 - dp(24), () -> toggleModule(4));
-        addRadialButton("MAP PHÍM", -2, size / 2 - dp(42), size - dp(91), this::openKeyMapper);
-        addRadialButton(hotkeyLabel(), -3, dp(29), dp(24), this::toggleHotkeys);
+        TextView subtitle = text("Functions • Fix Lag • Controls", 9, MUTED, false);
+        subtitle.setPadding(dp(2), dp(3), 0, dp(8));
+        column.addView(subtitle);
 
-        WlzLogoView center = makeCircle();
-        center.setCompactCircle(true);
-        FrameLayout.LayoutParams centerLp = new FrameLayout.LayoutParams(dp(70), dp(70));
-        centerLp.gravity = Gravity.CENTER;
-        radialMenu.addView(center, centerLp);
+        LinearLayout body = new LinearLayout(activity);
+        body.setOrientation(LinearLayout.HORIZONTAL);
+        body.setGravity(Gravity.FILL);
+        categoryNav = new LinearLayout(activity);
+        categoryNav.setOrientation(LinearLayout.VERTICAL);
+        categoryNav.setPadding(0, dp(2), dp(9), 0);
+        body.addView(categoryNav, new LinearLayout.LayoutParams(dp(132), -1));
 
-        circle.bringToFront();
-        center.setOnClickListener(v -> closeRadialMenu());
+        View divider = new View(activity);
+        divider.setBackgroundColor(STROKE);
+        body.addView(divider, new LinearLayout.LayoutParams(dp(1), -1));
+
+        categoryContent = new FrameLayout(activity);
+        categoryContent.setPadding(dp(10), dp(2), dp(1), 0);
+        LinearLayout.LayoutParams contentParams = new LinearLayout.LayoutParams(0, -1, 1f);
+        contentParams.leftMargin = dp(2);
+        body.addView(categoryContent, contentParams);
+        column.addView(body, new LinearLayout.LayoutParams(-1, 0, 1f));
+
+        for (int i = 0; i < GUI_CATEGORIES.length; i++) {
+            final int category = i;
+            Button item = button(GUI_CATEGORIES[i]);
+            item.setTag(Integer.valueOf(category));
+            item.setGravity(Gravity.CENTER_VERTICAL | Gravity.LEFT);
+            item.setPadding(dp(10), 0, dp(4), 0);
+            item.setOnClickListener(v -> {
+                selectedCategory = category;
+                refreshCategoryNavigation();
+                renderCategoryContent();
+            });
+            LinearLayout.LayoutParams itemParams = lp(-1, dp(40));
+            itemParams.bottomMargin = dp(4);
+            categoryNav.addView(item, itemParams);
+        }
+        refreshCategoryNavigation();
+        renderCategoryContent();
     }
 
-    private void addRadialButton(String label, int action, int left, int top, final Runnable click) {
-        Button b = button(label);
-        b.setTextSize(action == -2 ? 8 : 8.5f);
-        b.setBackground(circleButtonBackground());
-        b.setOnClickListener(v -> {
-            click.run();
-            if (action >= 0) {
-                refreshRadialLabels();
-            }
-        });
-
-        FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(dp(84), dp(44));
-        p.leftMargin = left;
-        p.topMargin = top;
-        radialMenu.addView(b, p);
-    }
-
-    private void refreshRadialLabels() {
-        if (radialMenu == null) return;
-        for (int i = 0; i < radialMenu.getChildCount(); i++) {
-            View v = radialMenu.getChildAt(i);
-            if (!(v instanceof Button)) continue;
-            Button b = (Button) v;
-            String label = b.getText().toString();
-            if ("ZOOM".equals(label)) b.setText(moduleLabel("ZOOM", 0));
-            else if ("LOOK".equals(label)) b.setText(moduleLabel("LOOK", 1));
-            else if ("FPS".equals(label)) b.setText(moduleLabel("FPS", 3));
-            else if ("BRIGHT".equals(label)) b.setText(moduleLabel("BRIGHT", 4));
-            else if (label.startsWith("HOTKEY")) b.setText(hotkeyLabel());
+    private void refreshCategoryNavigation() {
+        if (categoryNav == null) return;
+        for (int i = 0; i < categoryNav.getChildCount(); i++) {
+            View view = categoryNav.getChildAt(i);
+            if (!(view instanceof Button)) continue;
+            Button item = (Button) view;
+            int category = ((Integer) item.getTag()).intValue();
+            boolean selected = category == selectedCategory;
+            item.setTextColor(selected ? Color.WHITE : MUTED);
+            item.setBackground(round(selected ? ORANGE : ROW,
+                    selected ? ORANGE : STROKE, 1, 10));
         }
     }
 
-    private String moduleLabel(String name, int index) {
-        return WlzModuleManager.isModuleEnabled(activity, index) ? name + " ✓" : name;
+    private void renderCategoryContent() {
+        if (categoryContent == null) return;
+        categoryContent.removeAllViews();
+        LinearLayout page = new LinearLayout(activity);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setPadding(dp(2), 0, dp(2), dp(3));
+        ScrollView scroll = new ScrollView(activity);
+        scroll.setFillViewport(false);
+        scroll.addView(page);
+        categoryContent.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
+
+        addSectionHeading(page, GUI_CATEGORIES[selectedCategory].toUpperCase());
+        switch (selectedCategory) {
+            case 0:
+                addModuleRow(page, 0, "Zoom", "Phóng to tầm nhìn trong game");
+                addModuleRow(page, 1, "FreeLook", "Xoay camera mà không xoay người chơi");
+                break;
+            case 1:
+                addInfoCard(page, "Chưa có module Combat được xác minh cho runtime này.",
+                        "Không hiển thị công tắc giả cho KillAura hoặc Auto Clicker.");
+                break;
+            case 2:
+                addInfoCard(page, "Chưa có module Building được port an toàn.",
+                        "Phần này chỉ hiện chức năng khi đã được triển khai và kiểm tra.");
+                break;
+            case 3:
+                addModuleRow(page, 3, "Unlock FPS", "Yêu cầu tần số quét cao nhất mà màn hình hỗ trợ");
+                addModuleRow(page, 4, "Fullbright", "Tăng độ sáng nếu chữ ký runtime khớp");
+                addModuleRow(page, 8, "FPS Counter", "Hiển thị bộ đếm khung hình trên màn hình");
+                break;
+            case 4:
+                if (!WlzLagPackManager.isBundled(activity)) {
+                    addInfoCard(page, "Pack Fix Lag chưa được nhúng trong APK này.",
+                            "Tui không bật nút giả. Khi đủ 4 pack trong assets, Fix Lag 1/2/3 sẽ tự cài và kích hoạt trước khi mở game.");
+                    addProfilePreview(page, 1, "Fix Lag 1", "Hai pack chung");
+                    addProfilePreview(page, 2, "Fix Lag 2", "Hai pack chung + pack Fix Lag 2");
+                    addProfilePreview(page, 3, "Fix Lag 3", "Hai pack chung + pack Fix Lag 3");
+                } else {
+                    addProfileButton(page, 1, "FIX LAG 1  •  LITE", "Hai pack chung");
+                    addProfileButton(page, 2, "FIX LAG 2  •  BALANCED", "Hai pack chung + pack Fix Lag 2");
+                    addProfileButton(page, 3, "FIX LAG 3  •  EXTREME", "Hai pack chung + pack Fix Lag 3");
+                }
+                break;
+            case 5:
+                addInfoCard(page, "Map phím tự động hoạt động cùng chức năng.",
+                        "Không cần bật Hotkeys riêng. Chọn MAP để gán phím; phím của module không được hỗ trợ sẽ không bị chặn khỏi Minecraft.");
+                Button map = button("MAP PHÍM & VỊ TRÍ NÚT");
+                map.setTextColor(Color.WHITE);
+                map.setBackground(round(ORANGE, ORANGE, 1, 12));
+                map.setOnClickListener(v -> openKeyMapper());
+                page.addView(map, top(10, dp(44)));
+                break;
+            case 6:
+                addInfoCard(page, "Các module chưa được hỗ trợ trong bản runtime hiện tại",
+                        "Ném đồ, Hitbox, AutoSprint và Snaplook chưa được xác minh. Chúng không được hiển thị như công tắc đang hoạt động.");
+                break;
+            default:
+                addInfoCard(page, "WLZ Client • Bedrock ARM64",
+                        "Bản ClickGUI được tách riêng thành Fix Lag, Functions và Controls. Chỉ bật module khi runtime báo hỗ trợ.");
+                break;
+        }
     }
 
-    private String hotkeyLabel() {
-        return WlzKeyMapper.areHotkeysEnabled(activity) ? "HOTKEY ✓" : "HOTKEY";
+    private void addSectionHeading(LinearLayout page, String label) {
+        TextView heading = text(label, 11, ORANGE, true);
+        heading.setLetterSpacing(0.06f);
+        page.addView(heading, top(2));
+    }
+
+    private void addInfoCard(LinearLayout page, String title, String detail) {
+        LinearLayout card = new LinearLayout(activity);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(12), dp(11), dp(12), dp(11));
+        card.setBackground(round(ROW, STROKE, 1, 12));
+        card.addView(text(title, 11, TEXT, true));
+        TextView body = text(detail, 9, MUTED, false);
+        body.setLineSpacing(dp(2), 1f);
+        card.addView(body, top(5));
+        page.addView(card, top(8));
+    }
+
+    private void addModuleRow(LinearLayout page, final int index, String name, String detail) {
+        LinearLayout row = new LinearLayout(activity);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(10), dp(7), dp(9), dp(7));
+        row.setBackground(round(ROW, STROKE, 1, 12));
+
+        LinearLayout labels = new LinearLayout(activity);
+        labels.setOrientation(LinearLayout.VERTICAL);
+        labels.addView(text(name, 11, TEXT, true));
+        TextView hint = text(detail, 9, MUTED, false);
+        hint.setLineSpacing(dp(1), 1f);
+        labels.addView(hint, top(3));
+        row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
+
+        boolean supported = WlzModuleManager.isModuleSupported(activity, index);
+        if (supported) {
+            Switch toggle = new Switch(activity);
+            toggle.setChecked(WlzModuleManager.isModuleEnabled(activity, index));
+            toggle.setOnCheckedChangeListener((buttonView, checked) -> {
+                WlzModuleManager.setModuleEnabled(activity, index, checked);
+                boolean actual = WlzModuleManager.isModuleEnabled(activity, index);
+                if (actual != checked) buttonView.setChecked(actual);
+                applyVisuals();
+            });
+            row.addView(toggle, lp(-2, -2));
+        } else {
+            TextView badge = text("CHƯA HỖ TRỢ", 8, MUTED, true);
+            row.addView(badge, lp(-2, -2));
+        }
+        page.addView(row, top(8));
+    }
+
+    private void addProfilePreview(LinearLayout page, int profile, String title, String detail) {
+        LinearLayout row = new LinearLayout(activity);
+        row.setOrientation(LinearLayout.VERTICAL);
+        row.setPadding(dp(10), dp(8), dp(10), dp(8));
+        row.setBackground(round(ROW, STROKE, 1, 10));
+        row.addView(text(title, 10, MUTED, true));
+        row.addView(text(detail, 9, MUTED, false), top(2));
+        page.addView(row, top(6));
+    }
+
+    private void addProfileButton(LinearLayout page, int profile, String title, String detail) {
+        Button button = button(title + "  •  " + detail);
+        button.setGravity(Gravity.CENTER_VERTICAL | Gravity.LEFT);
+        button.setTextColor(TEXT);
+        button.setBackground(round(ROW, STROKE, 1, 10));
+        button.setOnClickListener(v -> {
+            boolean ok = WlzLagPackManager.applyPreset(activity, profile);
+            if (ok) {
+                Toast.makeText(activity, "Đã áp dụng Fix Lag " + profile + ". Mở lại thế giới để tải pack.", Toast.LENGTH_LONG).show();
+            } else {
+                Toast.makeText(activity, "Không cài được pack Fix Lag; game chưa được đổi cấu hình.", Toast.LENGTH_LONG).show();
+            }
+        });
+        page.addView(button, top(7, dp(44)));
     }
 
     private void toggleModule(int index) {
+        if (!WlzModuleManager.isModuleSupported(activity, index)) {
+            Toast.makeText(activity, "Module chưa được hỗ trợ trong runtime này.", Toast.LENGTH_SHORT).show();
+            return;
+        }
         boolean enabled = WlzModuleManager.isModuleEnabled(activity, index);
         WlzModuleManager.setModuleEnabled(activity, index, !enabled);
         applyVisuals();
-        if (radialMenu != null) refreshRadialLabels();
-    }
-
-    private void toggleHotkeys() {
-        boolean enabled = WlzKeyMapper.areHotkeysEnabled(activity);
-        WlzKeyMapper.setHotkeysEnabled(activity, !enabled);
-        if (radialMenu != null) refreshRadialLabels();
+        renderCategoryContent();
     }
 
     private void openKeyMapper() {
@@ -401,18 +560,8 @@ public final class WlzInGameHud {
         TextView title = text("WLZ • MAP PHÍM", 16, ORANGE, true);
         head.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
 
-        Button hotkey = button(WlzKeyMapper.areHotkeysEnabled(activity)
-                ? "HOTKEY: BẬT" : "HOTKEY: TẮT");
-        hotkey.setTextColor(ORANGE);
-        hotkey.setOnClickListener(v -> {
-            WlzKeyMapper.setHotkeysEnabled(activity,
-                    !WlzKeyMapper.areHotkeysEnabled(activity));
-            hotkey.setText(WlzKeyMapper.areHotkeysEnabled(activity)
-                    ? "HOTKEY: BẬT" : "HOTKEY: TẮT");
-            if (WlzKeyMapper.areHotkeysEnabled(activity)) installKeyHook();
-            else if (captureAction < 0) restoreKeyHook();
-        });
-        head.addView(hotkey, lp(dp(116), dp(42)));
+        TextView mappingStatus = text("HOTKEY TỰ ĐỘNG", 9, MUTED, true);
+        head.addView(mappingStatus, lp(dp(116), dp(42)));
 
         Button close = button("X");
         close.setTextColor(ORANGE);
@@ -420,7 +569,7 @@ public final class WlzInGameHud {
         head.addView(close, lp(dp(46), dp(42)));
         keyMapperPanel.addView(head);
 
-        TextView info = text("Chọn MAP rồi bấm phím OTG để gán.", 9, MUTED, false);
+        TextView info = text("Chọn MAP rồi bấm phím để gán. Hotkey hoạt động cùng module, không cần bật riêng.", 9, MUTED, false);
         keyMapperPanel.addView(info, top(7));
 
         LinearLayout list = new LinearLayout(activity);
