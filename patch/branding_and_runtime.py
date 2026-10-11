@@ -45,6 +45,23 @@ def _png_chunk(kind: bytes, data: bytes) -> bytes:
     return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
 
 
+def icon_size_for_path(name: str):
+    if name in ICON_SIZES:
+        return ICON_SIZES[name]
+    lower = name.lower()
+    base = Path(lower).name
+    if not lower.startswith("res/") or not lower.endswith(".png"):
+        return None
+    if base not in {"icon.png", "ic_launcher.png", "launcher_icon.png", "app_icon.png", "launcher.png"}:
+        return None
+    if "xxxhdpi" in lower: return 288
+    if "xxhdpi" in lower: return 192
+    if "xhdpi" in lower: return 144
+    if "hdpi" in lower: return 96
+    if "mdpi" in lower: return 72
+    return 192
+
+
 def make_wlz_icon_png(size: int) -> bytes:
     """Create a compact orange WLZ + crown app icon using only stdlib."""
     dark = (8, 9, 12, 255)
@@ -158,8 +175,9 @@ def patch_apk(path: Path) -> dict:
             for info in source.infolist():
                 data = source.read(info.filename)
                 suffix = Path(info.filename).suffix.lower()
-                if info.filename in ICON_SIZES:
-                    data = make_wlz_icon_png(ICON_SIZES[info.filename])
+                icon_size = icon_size_for_path(info.filename)
+                if icon_size is not None:
+                    data = make_wlz_icon_png(icon_size)
                     icon_count += 1
                     changed.append(info.filename)
                 if suffix in SCAN_SUFFIXES:
