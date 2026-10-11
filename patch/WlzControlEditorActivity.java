@@ -57,7 +57,7 @@ public final class WlzControlEditorActivity extends Activity {
         captureStatus = text("Chạm MAP rồi bấm phím OTG để gán.", 9, MUTED, false);
         page.addView(captureStatus, top(5));
 
-        page.addView(text("Nút cảm ứng có thể kéo thả trong vùng bên dưới.", 9, MUTED, false), top(8));
+        page.addView(text("Kéo nút để đổi vị trí. Hotkey tự hoạt động theo module, không cần bật riêng.", 9, MUTED, false), top(8));
         page.addView(editorCanvas(), top(6, dp(300)));
 
         ScrollView scroll = new ScrollView(this);
@@ -76,8 +76,8 @@ public final class WlzControlEditorActivity extends Activity {
         FrameLayout canvas = new FrameLayout(this);
         canvas.setBackground(round(PANEL, STROKE, 1, 16));
 
-        String[] labels = {"ZOOM", "FPS", "BRIGHT", "SNAP", "MENU"};
-        int[] actions = {0, 3, 4, 7, -1};
+        String[] labels = {"ZOOM", "LOOK", "FPS", "BRIGHT", "MENU"};
+        int[] actions = {0, 1, 8, 4, -1};
         for (int i = 0; i < labels.length; i++) {
             Button b = touchButton(labels[i], actions[i]);
             FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(dp(78), dp(48));
@@ -143,11 +143,17 @@ public final class WlzControlEditorActivity extends Activity {
         LinearLayout copy = new LinearLayout(this);
         copy.setOrientation(LinearLayout.VERTICAL);
         copy.addView(text(WlzKeyMapper.ACTIONS[action], 11, TEXT, true), lp(-1, -2));
-        copy.addView(text("Phím: " + WlzKeyMapper.keyName(WlzKeyMapper.getKey(this, action)), 9, MUTED, false), top(2));
+        final boolean implemented = WlzKeyMapper.isActionImplemented(action);
+        copy.addView(text(implemented
+                ? "Phím: " + WlzKeyMapper.keyName(WlzKeyMapper.getKey(this, action))
+                : "Chưa được port vào runtime", 9, MUTED, false), top(2));
         row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
 
-        Button map = button(captureAction == action ? "ĐANG CHỜ..." : "MAP");
+        Button map = button(!implemented ? "CHƯA HỖ TRỢ" : captureAction == action ? "ĐANG CHỜ..." : "MAP");
+        map.setEnabled(implemented);
+        map.setAlpha(implemented ? 1f : 0.55f);
         map.setOnClickListener(v -> {
+            if (!implemented) return;
             captureAction = action;
             captureStatus.setText("Đang chờ phím cho " + WlzKeyMapper.ACTIONS[action] + "…");
             build();
