@@ -32,17 +32,17 @@ public final class WlzKeyMapper {
     public static void setKey(Context context, int action, int keyCode) {
         if (action < 0 || action >= ACTIONS.length) return;
         prefs(context).edit().putInt("key_" + action, keyCode).apply();
-        setHotkeysEnabled(context, true);
     }
 
+    /** Hotkeys are coupled to module mappings; there is no separate global switch. */
     public static boolean areHotkeysEnabled(Context context) {
-        return context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
-                .getBoolean("hotkeys_enabled", false);
+        return true;
     }
 
+    /** Kept for compatibility with old saved settings / older screens. */
     public static void setHotkeysEnabled(Context context, boolean enabled) {
         context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
-                .edit().putBoolean("hotkeys_enabled", enabled).apply();
+                .edit().putBoolean("hotkeys_enabled", true).apply();
         try { WlzInGameHud.refreshAllHotkeys(); } catch (Throwable ignored) {}
     }
 
@@ -54,14 +54,14 @@ public final class WlzKeyMapper {
     }
 
     public static boolean trigger(Context context, int keyCode) {
-        if (!areHotkeysEnabled(context)) return false;
-
         for (int i = 0; i < ACTIONS.length; i++) {
-            if (getKey(context, i) == keyCode) {
-                boolean enabled = WlzModuleManager.isModuleEnabled(context, i);
-                WlzModuleManager.setModuleEnabled(context, i, !enabled);
-                return true;
-            }
+            if (getKey(context, i) != keyCode) continue;
+            // Let the game handle keys bound to modules that are not ported to
+            // this runtime; do not swallow input for a feature that cannot run.
+            if (!WlzModuleManager.isModuleSupported(context, i)) return false;
+            boolean enabled = WlzModuleManager.isModuleEnabled(context, i);
+            WlzModuleManager.setModuleEnabled(context, i, !enabled);
+            return true;
         }
         return false;
     }
