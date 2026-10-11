@@ -158,7 +158,7 @@ public final class WlzInGameHud {
 
     private static void collectLegacyMarkersRecursive(View view, LegacyMarkers markers) {
         if (view instanceof TextView) {
-            String value = ((TextView) view).getText();
+            CharSequence value = ((TextView) view).getText();
             String text = value == null ? "" : value.toString().toLowerCase();
             if (text.contains("apollon") && (text.contains("v6.6") || text.contains("chem") || text.contains("client"))) {
                 markers.hasApollonTitle = true;
