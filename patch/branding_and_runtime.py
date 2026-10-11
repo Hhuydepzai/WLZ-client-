@@ -29,6 +29,93 @@ PACKAGE_PATHS = [
 ]
 SCAN_SUFFIXES = {".dex", ".so", ".arsc", ".xml", ".json", ".txt"}
 
+# These names are existing Apollon icon resources. Replace their PNG bytes
+# without changing resource IDs or the compiled resources.arsc table.
+ICON_SIZES = {
+    "res/drawable-mdpi-v4/icon.png": 72,
+    "res/drawable-hdpi-v4/icon.png": 96,
+    "res/drawable-xhdpi-v4/icon.png": 144,
+    "res/drawable-xxhdpi-v4/icon.png": 192,
+    "res/drawable-xxxhdpi-v4/icon.png": 288,
+}
+
+
+def _png_chunk(kind: bytes, data: bytes) -> bytes:
+    body = kind + data
+    return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
+
+
+def make_wlz_icon_png(size: int) -> bytes:
+    """Create a compact orange WLZ + crown app icon using only stdlib."""
+    dark = (8, 9, 12, 255)
+    orange = (255, 112, 0, 255)
+    gold = (255, 190, 55, 255)
+    black = (0, 0, 0, 255)
+    pixels = bytearray(size * size * 4)
+
+    # Soft dark field with a restrained amber glow/ring.
+    cx = cy = (size - 1) / 2.0
+    radius = size * 0.43
+    for y in range(size):
+        for x in range(size):
+            d = ((x - cx) ** 2 + (y - cy) ** 2) ** 0.5
+            glow = max(0.0, 1.0 - d / (size * 0.78))
+            lift = int(14 * glow * glow)
+            color = (dark[0] + lift, dark[1] + int(lift * .45), dark[2], 255)
+            if abs(d - radius) < max(1.4, size * .012):
+                color = orange
+            q = (y * size + x) * 4
+            pixels[q:q+4] = bytes(color)
+
+    def paint_polygon(points, color):
+        pts = [(px * size, py * size) for px, py in points]
+        min_y = max(0, int(min(y for _, y in pts)))
+        max_y = min(size - 1, int(max(y for _, y in pts)) + 1)
+        min_x = max(0, int(min(x for x, _ in pts)))
+        max_x = min(size - 1, int(max(x for x, _ in pts)) + 1)
+        for iy in range(min_y, max_y + 1):
+            yy = iy + .5
+            intersections = []
+            for i in range(len(pts)):
+                x1, y1 = pts[i]
+                x2, y2 = pts[(i + 1) % len(pts)]
+                if (y1 <= yy < y2) or (y2 <= yy < y1):
+                    intersections.append(x1 + (yy-y1) * (x2-x1) / (y2-y1))
+            intersections.sort()
+            for j in range(0, len(intersections)-1, 2):
+                xa = max(min_x, int(intersections[j]))
+                xb = min(max_x, int(intersections[j+1]) + 1)
+                for ix in range(xa, xb + 1):
+                    q = (iy * size + ix) * 4
+                    pixels[q:q+4] = bytes(color)
+
+    # Crown silhouette and inset gold highlight.
+    paint_polygon([(0.31,.16),(.43,.28),(.50,.12),(.57,.28),(.69,.16),(.65,.39),(.35,.39)], black)
+    paint_polygon([(0.33,.17),(.43,.28),(.50,.14),(.57,.28),(.67,.17),(.63,.36),(.37,.36)], orange)
+    paint_polygon([(0.38,.22),(.44,.29),(.50,.18),(.56,.29),(.62,.22),(.60,.32),(.40,.32)], gold)
+
+    # Thick angular WLZ wordmark; dark under-stroke adds separation at small size.
+    glyphs = [
+        [(0.13,.46),(.22,.46),(.26,.61),(.32,.49),(.38,.61),(.42,.46),(.50,.46),(.43,.79),(.35,.79),(.32,.69),(.28,.79),(.21,.79)],
+        [(.47,.46),(.56,.46),(.56,.71),(.63,.71),(.63,.80),(.47,.80)],
+        [(.61,.46),(.86,.46),(.86,.53),(.70,.71),(.86,.71),(.86,.80),(.60,.80),(.60,.73),(.76,.54),(.61,.54)],
+    ]
+    for poly in glyphs:
+        expanded = [(0.50+(x-.50)*1.045, 0.63+(y-.63)*1.045) for x,y in poly]
+        paint_polygon(expanded, black)
+        paint_polygon(poly, orange)
+    # Gold cut facets, kept sparse to avoid a cluttered thumbnail.
+    paint_polygon([(.16,.49),(.21,.49),(.25,.62),(.22,.62)], gold)
+    paint_polygon([(.65,.49),(.81,.49),(.78,.52),(.66,.52)], gold)
+
+    raw = bytearray()
+    for y in range(size):
+        raw.append(0)  # PNG filter: None
+        raw.extend(pixels[y * size * 4:(y + 1) * size * 4])
+    header = struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0)
+    return (b"\\x89PNG\\r\\n\\x1a\\n" + _png_chunk(b"IHDR", header)
+            + _png_chunk(b"IDAT", zlib.compress(bytes(raw), 9)) + _png_chunk(b"IEND", b""))
+
 
 def patch_dex_header(data: bytearray) -> None:
     if not data.startswith(b"dex\n") or len(data) < 112:
@@ -61,6 +148,7 @@ def patch_apk(path: Path) -> dict:
     tmp = path.with_suffix(path.suffix + ".debrand.tmp")
     brand_count = 0
     path_count = 0
+    icon_count = 0
     changed = []
     with zipfile.ZipFile(path, "r") as source:
         bad = source.testzip()
@@ -70,6 +158,10 @@ def patch_apk(path: Path) -> dict:
             for info in source.infolist():
                 data = source.read(info.filename)
                 suffix = Path(info.filename).suffix.lower()
+                if info.filename in ICON_SIZES:
+                    data = make_wlz_icon_png(ICON_SIZES[info.filename])
+                    icon_count += 1
+                    changed.append(info.filename)
                 if suffix in SCAN_SUFFIXES:
                     data, n_brand = replace_equal_length(data, BRAND)
                     data, n_paths = replace_equal_length(data, PACKAGE_PATHS)
@@ -116,9 +208,12 @@ def patch_apk(path: Path) -> dict:
         "apk": str(path),
         "title_replacements": brand_count,
         "package_path_replacements": path_count,
+        "launcher_icons_replaced": icon_count,
         "modified_entries": changed,
         "zip_integrity": "OK",
     }
+    if icon_count == 0:
+        print("WARNING: no known Apollon launcher PNG path matched; resources.arsc was preserved.", flush=True)
     print("WLZ branding/path patch:", result, flush=True)
     return result
 
