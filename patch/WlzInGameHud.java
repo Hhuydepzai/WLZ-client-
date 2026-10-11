@@ -22,6 +22,7 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Switch;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
@@ -814,6 +815,12 @@ public final class WlzInGameHud {
 
     private LinearLayout.LayoutParams top(int margin) {
         LinearLayout.LayoutParams p = lp(-1, -2);
+        p.topMargin = dp(margin);
+        return p;
+    }
+
+    private LinearLayout.LayoutParams top(int margin, int height) {
+        LinearLayout.LayoutParams p = lp(-1, height);
         p.topMargin = dp(margin);
         return p;
     }
