@@ -33,11 +33,11 @@ public final class WlzLagPackManager {
     private static final Pack COMMON_A = new Pack(
             "common_a.mcpack", "wlz_fixlag_common_a", "WLZ Fix Lag - Common A",
             "b8b4fc93-2a7a-5e9c-9e76-4d620e2d32e1",
-            "72e3c504-7c2f-52b8-a2a4-2cde8c6cebb1", null);
+            "72e3c504-7c2f-52b8-a2a4-2cde8c6cebb1", "noanimation");
     private static final Pack COMMON_B = new Pack(
             "common_b.mcpack", "wlz_fixlag_common_b", "WLZ Fix Lag - Common B",
             "e4ea3b8f-83bc-51b8-9866-3f9fb9fae9b7",
-            "ba31b06d-68b6-52c8-8da4-40eece0a6691", "lite");
+            "ba31b06d-68b6-52c8-8da4-40eece0a6691", "lite", "turbo");
     private static final Pack FIXLAG2 = new Pack(
             "fixlag2.mcpack", "wlz_fixlag_2", "WLZ Fix Lag 2",
             "1b69366c-3a89-5f25-90b4-19f3e30b5d63",
@@ -179,13 +179,16 @@ public final class WlzLagPackManager {
         root.put("format_version", 2);
         root.put("header", header);
         root.put("modules", new JSONArray().put(module));
-        if (pack.subpackName != null) {
+        if (pack.subpackNames.length > 0) {
             JSONArray subpacks = new JSONArray();
-            JSONObject subpack = new JSONObject();
-            subpack.put("folder_name", pack.subpackName);
-            subpack.put("name", "Lite");
-            subpack.put("memory_tier", 0);
-            subpacks.put(subpack);
+            for (String subpackName : pack.subpackNames) {
+                JSONObject subpack = new JSONObject();
+                subpack.put("folder_name", subpackName);
+                subpack.put("name", subpackName.equals("turbo") ? "Turbo"
+                        : (subpackName.equals("noanimation") ? "No Animation" : "Lite"));
+                subpack.put("memory_tier", subpackName.equals("turbo") ? 1 : 0);
+                subpacks.put(subpack);
+            }
             root.put("subpacks", subpacks);
         }
         try (FileOutputStream out = new FileOutputStream(manifest)) {
@@ -244,22 +247,23 @@ public final class WlzLagPackManager {
     }
 
     private static final class Pack {
-        final String assetName, folderName, displayName, packUuid, moduleUuid, subpackName;
+        final String assetName, folderName, displayName, packUuid, moduleUuid;
+        final String[] subpackNames;
         Pack(String assetName, String folderName, String displayName,
-             String packUuid, String moduleUuid, String subpackName) {
+             String packUuid, String moduleUuid, String... subpackNames) {
             this.assetName = assetName;
             this.folderName = folderName;
             this.displayName = displayName;
             this.packUuid = packUuid;
             this.moduleUuid = moduleUuid;
-            this.subpackName = subpackName;
+            this.subpackNames = subpackNames == null ? new String[0] : subpackNames;
         }
 
         JSONObject stackEntry() throws JSONException {
             JSONObject object = new JSONObject();
             object.put("pack_id", packUuid);
             object.put("version", new JSONArray("[1,0,0]"));
-            if (subpackName != null) object.put("subpack", subpackName);
+            if (subpackNames.length > 0) object.put("subpack", subpackNames[0]);
             return object;
         }
     }
