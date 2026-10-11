@@ -57,18 +57,74 @@ public final class WlzLagPackManager {
 
     private WlzLagPackManager() {}
 
-    /** Returns true only if all four original uploads are embedded in app assets. */
+    /**
+     * True when all four packs are either embedded by the build or imported once
+     * through the WLZ launcher. No manual Global Resources installation is needed.
+     */
     public static boolean isBundled(Context context) {
         try {
             Set<String> names = new HashSet<String>();
-            for (String name : context.getAssets().list("wlz_packs")) names.add(name);
-            return names.contains(COMMON_A.assetName)
-                    && names.contains(COMMON_B.assetName)
-                    && names.contains(FIXLAG2.assetName)
-                    && names.contains(FIXLAG3.assetName);
-        } catch (Throwable error) {
-            return false;
+            String[] embedded = context.getAssets().list("wlz_packs");
+            if (embedded != null) for (String name : embedded) names.add(name);
+            if (names.contains(COMMON_A.assetName) && names.contains(COMMON_B.assetName)
+                    && names.contains(FIXLAG2.assetName) && names.contains(FIXLAG3.assetName)) return true;
+        } catch (Throwable ignored) {}
+
+        File source = new File(context.getFilesDir(), "wlz_pack_sources");
+        for (Pack pack : ALL_PACKS) {
+            File file = new File(source, pack.assetName);
+            if (!file.isFile() || file.length() < 32) return false;
         }
+        return true;
+    }
+
+    private static final Pack[] ALL_PACKS = {COMMON_A, COMMON_B, FIXLAG2, FIXLAG3};
+
+    /** Copy a chosen .mcpack into private storage; its pack UUID/manifest are normalized at install time. */
+    public static void importPack(Context context, String canonicalName, InputStream input) throws IOException {
+        Pack pack = null;
+        for (Pack candidate : ALL_PACKS) {
+            if (candidate.assetName.equals(canonicalName)) { pack = candidate; break; }
+        }
+        if (pack == null) throw new IOException("Unknown WLZ pack name");
+        if (input == null) throw new IOException("No data stream for " + canonicalName);
+
+        File root = new File(context.getFilesDir(), "wlz_pack_sources");
+        if (!root.exists() && !root.mkdirs()) throw new IOException("Cannot create pack storage");
+        File target = new File(root, canonicalName);
+        File temp = new File(root, canonicalName + ".tmp");
+        try (InputStream source = new BufferedInputStream(input);
+             BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream(temp))) {
+            byte[] buffer = new byte[32768];
+            int n;
+            while ((n = source.read(buffer)) != -1) out.write(buffer, 0, n);
+        } catch (Throwable error) {
+            temp.delete();
+            if (error instanceof IOException) throw (IOException) error;
+            throw new IOException("Could not import " + canonicalName, error);
+        }
+
+        boolean hasEntry = false;
+        try (ZipInputStream zip = new ZipInputStream(new BufferedInputStream(new FileInputStream(temp)))) {
+            ZipEntry entry;
+            byte[] buffer = new byte[32768];
+            while ((entry = zip.getNextEntry()) != null) {
+                hasEntry = true;
+                while (zip.read(buffer) != -1) { /* consume to validate the archive stream */ }
+                zip.closeEntry();
+            }
+        } catch (Throwable error) {
+            temp.delete();
+            if (error instanceof IOException) throw (IOException) error;
+            throw new IOException("Invalid mcpack archive: " + canonicalName, error);
+        }
+        if (!hasEntry || temp.length() < 32) {
+            temp.delete();
+            throw new IOException("Empty or invalid mcpack: " + canonicalName);
+        }
+        if (target.exists() && !target.delete()) { temp.delete(); throw new IOException("Cannot replace pack"); }
+        if (!temp.renameTo(target)) { temp.delete(); throw new IOException("Cannot save pack"); }
+        Log.i(TAG, "Imported " + canonicalName + " (" + target.length() + " bytes)");
     }
 
     public static int getSelectedProfile(Context context) {
@@ -90,10 +146,10 @@ public final class WlzLagPackManager {
                 throw new IOException("Cannot create " + packRoot);
             }
 
-            installPack(context.getAssets(), packRoot, COMMON_A);
-            installPack(context.getAssets(), packRoot, COMMON_B);
-            if (profile == 2) installPack(context.getAssets(), packRoot, FIXLAG2);
-            if (profile == 3) installPack(context.getAssets(), packRoot, FIXLAG3);
+            installPack(context, packRoot, COMMON_A);
+            installPack(context, packRoot, COMMON_B);
+            if (profile == 2) installPack(context, packRoot, FIXLAG2);
+            if (profile == 3) installPack(context, packRoot, FIXLAG3);
 
             writeStack(new File(root, "global_resource_packs.json"), profile);
             context.getSharedPreferences("wlz_settings", Context.MODE_PRIVATE)
@@ -106,6 +162,16 @@ public final class WlzLagPackManager {
         }
     }
 
+    private static InputStream openPackSource(Context context, Pack pack) throws IOException {
+        try {
+            return new BufferedInputStream(context.getAssets().open("wlz_packs/" + pack.assetName));
+        } catch (IOException assetMissing) {
+            File source = new File(new File(context.getFilesDir(), "wlz_pack_sources"), pack.assetName);
+            if (!source.isFile() || source.length() < 32) throw new IOException("Missing Fix Lag pack: " + pack.assetName, assetMissing);
+            return new BufferedInputStream(new FileInputStream(source));
+        }
+    }
+
     private static File storageRoot(Context context) throws IOException {
         File external = context.getExternalFilesDir(null);
         File base = external != null ? external : context.getFilesDir();
@@ -114,7 +180,7 @@ public final class WlzLagPackManager {
         return root;
     }
 
-    private static void installPack(AssetManager assets, File packRoot, Pack pack)
+    private static void installPack(Context context, File packRoot, Pack pack)
             throws IOException, JSONException {
         File target = new File(packRoot, pack.folderName);
         File manifest = new File(target, "manifest.json");
@@ -130,9 +196,7 @@ public final class WlzLagPackManager {
 
         deleteTree(target);
         if (!target.mkdirs()) throw new IOException("Cannot create pack folder " + target);
-        String assetPath = "wlz_packs/" + pack.assetName;
-        try (ZipInputStream zip = new ZipInputStream(
-                new BufferedInputStream(assets.open(assetPath)))) {
+        try (ZipInputStream zip = new ZipInputStream(openPackSource(context, pack))) {
             ZipEntry entry;
             byte[] buffer = new byte[32768];
             while ((entry = zip.getNextEntry()) != null) {
