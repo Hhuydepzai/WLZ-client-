@@ -440,3 +440,18 @@ jobs:
             dist/WLZ-Client-2.3.6.apk
             dist/SHA256SUMS.txt
           if-no-files-found: error
+
+      - name: Publish one direct APK download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="v2.3.6"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/WLZ-Client-2.3.6.apk --clobber
+          else
+            gh release create "$TAG" dist/WLZ-Client-2.3.6.apk \
+              --title "WLZ Client 2.3.6" \
+              --notes "WLZ Client ARM64 APK. Built and APK-signature verified by GitHub Actions. Back up Minecraft worlds before replacing test builds."
+          fi
