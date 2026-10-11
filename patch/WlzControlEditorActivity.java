@@ -18,13 +18,13 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 public final class WlzControlEditorActivity extends Activity {
-    private static final int BG = Color.WHITE;
-    private static final int PANEL = Color.rgb(248, 248, 248);
-    private static final int PANEL_2 = Color.rgb(242, 242, 244);
-    private static final int STROKE = Color.rgb(224, 224, 228);
+    private static final int BG = Color.rgb(8, 9, 12);
+    private static final int PANEL = Color.rgb(18, 20, 25);
+    private static final int PANEL_2 = Color.rgb(24, 27, 33);
+    private static final int STROKE = Color.rgb(48, 52, 61);
     private static final int ORANGE = Color.rgb(255, 112, 0);
-    private static final int TEXT = Color.rgb(30, 30, 32);
-    private static final int MUTED = Color.rgb(105, 108, 114);
+    private static final int TEXT = Color.rgb(246, 247, 250);
+    private static final int MUTED = Color.rgb(150, 156, 166);
 
     private FrameLayout root;
     private TextView captureStatus;

@@ -12,6 +12,8 @@ import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
+import android.util.Log;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
@@ -24,10 +26,13 @@ import android.widget.TextView;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public final class WlzInGameHud {
+    private static final String HUD_TAG = "com.wlz.client.HUD_LAYER";
     private static final Map<Activity, WlzInGameHud> ACTIVE = new HashMap<Activity, WlzInGameHud>();
 
     private static final int ORANGE = Color.rgb(255, 112, 0);
@@ -62,8 +67,9 @@ public final class WlzInGameHud {
 
     private WlzInGameHud(Activity activity) {
         this.activity = activity;
-        this.decor = (FrameLayout) activity.getWindow().getDecorView();
+        this.decor = resolveDecor(activity);
         this.layer = new FrameLayout(activity);
+        layer.setTag(HUD_TAG);
         layer.setClipChildren(false);
         layer.setClipToPadding(false);
         decor.addView(layer, new FrameLayout.LayoutParams(-1, -1));
@@ -84,23 +90,134 @@ public final class WlzInGameHud {
         if (!"com.mojang.minecraftpe.MainActivity".equals(activity.getClass().getName())) return;
 
         activity.runOnUiThread(() -> {
-            if (!ACTIVE.containsKey(activity)) {
-                ACTIVE.put(activity, new WlzInGameHud(activity));
+            try {
+                synchronized (ACTIVE) {
+                    if (ACTIVE.containsKey(activity)) return;
+                    View root = activity.getWindow() == null ? null : activity.getWindow().getDecorView();
+                    if (root instanceof ViewGroup && ((ViewGroup) root).findViewWithTag(HUD_TAG) != null) return;
+                    // The base V6.6 screen contains a separate purple Apollon client panel.
+                    // Remove it only if it is identifiable by its own title plus multiple
+                    // legacy module labels in a bounded child view. Never remove game root.
+                    removeLegacyApollonOverlay(root);
+                    ACTIVE.put(activity, new WlzInGameHud(activity));
+                }
+            } catch (Throwable error) {
+                Log.e("WLZRuntime", "HUD attach failed; continuing without overlay", error);
             }
         });
     }
 
+    private static void removeLegacyApollonOverlay(View root) {
+        if (!(root instanceof ViewGroup)) return;
+        ViewGroup decor = (ViewGroup) root;
+        View candidate = findLegacyOverlay(decor, decor);
+        if (candidate == null || candidate == root || candidate.getId() == android.R.id.content) return;
+        if (!(candidate.getParent() instanceof ViewGroup)) return;
+
+        int rw = Math.max(1, decor.getWidth());
+        int rh = Math.max(1, decor.getHeight());
+        int cw = candidate.getWidth();
+        int ch = candidate.getHeight();
+        // A full-screen candidate could be the game's own content. Refuse to remove it.
+        if (cw <= 0 || ch <= 0 || cw >= rw * 0.96f || ch >= rh * 0.96f) return;
+
+        try {
+            ((ViewGroup) candidate.getParent()).removeView(candidate);
+            Log.i("WLZRuntime", "Removed detected legacy Apollon overlay view " +
+                    candidate.getClass().getSimpleName() + " (" + cw + "x" + ch + ")");
+        } catch (Throwable error) {
+            Log.w("WLZRuntime", "Could not remove legacy overlay view", error);
+        }
+    }
+
+    private static View findLegacyOverlay(ViewGroup parent, View decor) {
+        for (int i = 0; i < parent.getChildCount(); i++) {
+            View child = parent.getChildAt(i);
+            if (!(child instanceof ViewGroup)) continue;
+            View nested = findLegacyOverlay((ViewGroup) child, decor);
+            if (nested != null) return nested;
+
+            LegacyMarkers markers = collectLegacyMarkers(child);
+            if (!markers.hasApollonTitle || markers.modules.size() < 3) continue;
+            if (child == decor || child.getId() == android.R.id.content) continue;
+
+            int rw = Math.max(1, decor.getWidth());
+            int rh = Math.max(1, decor.getHeight());
+            if (child.getWidth() <= 0 || child.getHeight() <= 0) continue;
+            if (child.getWidth() >= rw * 0.96f || child.getHeight() >= rh * 0.96f) continue;
+            return child;
+        }
+        return null;
+    }
+
+    private static LegacyMarkers collectLegacyMarkers(View root) {
+        LegacyMarkers markers = new LegacyMarkers();
+        collectLegacyMarkersRecursive(root, markers);
+        return markers;
+    }
+
+    private static void collectLegacyMarkersRecursive(View view, LegacyMarkers markers) {
+        if (view instanceof TextView) {
+            String value = ((TextView) view).getText();
+            String text = value == null ? "" : value.toString().toLowerCase();
+            if (text.contains("apollon") && (text.contains("v6.6") || text.contains("chem") || text.contains("client"))) {
+                markers.hasApollonTitle = true;
+            }
+            String[] moduleLabels = {
+                    "freelook", "step", "ladder fly", "noclip", "killaura",
+                    "target lock", "mobaura", "mob aura", "kill near items", "auto clicker"
+            };
+            for (String label : moduleLabels) {
+                if (text.contains(label)) markers.modules.add(label);
+            }
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                collectLegacyMarkersRecursive(group.getChildAt(i), markers);
+            }
+        }
+    }
+
+    private static final class LegacyMarkers {
+        boolean hasApollonTitle;
+        final java.util.Set<String> modules = new java.util.HashSet<String>();
+        int moduleCount() { return modules.size(); }
+    }
+
+    private static FrameLayout resolveDecor(Activity activity) {
+        View root = activity.getWindow() == null ? null : activity.getWindow().getDecorView();
+        if (root instanceof FrameLayout) return (FrameLayout) root;
+        View content = activity.findViewById(android.R.id.content);
+        if (content instanceof FrameLayout) return (FrameLayout) content;
+        throw new IllegalStateException("No FrameLayout available for WLZ overlay");
+    }
+
     public static void detach(Activity activity) {
-        WlzInGameHud hud = ACTIVE.remove(activity);
-        if (hud != null) hud.close();
+        WlzInGameHud hud;
+        synchronized (ACTIVE) {
+            hud = ACTIVE.remove(activity);
+        }
+        if (hud != null) {
+            try {
+                hud.close();
+            } catch (Throwable error) {
+                Log.w("WLZRuntime", "HUD cleanup failed", error);
+            }
+        }
     }
 
     public static void refreshAllHotkeys() {
-        for (WlzInGameHud hud : ACTIVE.values()) {
-            if (WlzKeyMapper.areHotkeysEnabled(hud.activity)) {
-                hud.installKeyHook();
-            } else {
-                hud.restoreKeyHook();
+        final List<WlzInGameHud> snapshot;
+        synchronized (ACTIVE) {
+            snapshot = new ArrayList<WlzInGameHud>(ACTIVE.values());
+        }
+        for (WlzInGameHud hud : snapshot) {
+            try {
+                if (WlzKeyMapper.areHotkeysEnabled(hud.activity)) hud.installKeyHook();
+                else hud.restoreKeyHook();
+            } catch (Throwable error) {
+                Log.w("WLZRuntime", "Hotkey refresh failed", error);
             }
         }
     }
