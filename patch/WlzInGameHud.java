@@ -1,6 +1,7 @@
 package com.wlz.client;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -451,12 +452,25 @@ public final class WlzInGameHud {
                 break;
             case 5:
                 addInfoCard(page, "Map phím tự động hoạt động cùng chức năng.",
-                        "Không cần bật Hotkeys riêng. Chọn MAP để gán phím; phím của module không được hỗ trợ sẽ không bị chặn khỏi Minecraft.");
-                Button map = button("MAP PHÍM & VỊ TRÍ NÚT");
+                        "Không cần bật Hotkeys riêng. Chỉ những module đã có trong runtime mới được gán phím; các phím khác tiếp tục hoạt động trong Minecraft.");
+                Button map = button("MAP PHÍM");
                 map.setTextColor(Color.WHITE);
                 map.setBackground(round(ORANGE, ORANGE, 1, 12));
                 map.setOnClickListener(v -> openKeyMapper());
                 page.addView(map, top(10, dp(44)));
+
+                Button positions = button("CHỈNH VỊ TRÍ NÚT");
+                positions.setTextColor(ORANGE);
+                positions.setBackground(round(ROW, STROKE, 1, 12));
+                positions.setOnClickListener(v -> {
+                    try {
+                        closeRadialMenu();
+                        activity.startActivity(new Intent(activity, WlzControlEditorActivity.class));
+                    } catch (Throwable error) {
+                        Toast.makeText(activity, "Không mở được trình chỉnh vị trí.", Toast.LENGTH_LONG).show();
+                    }
+                });
+                page.addView(positions, top(8, dp(44)));
                 break;
             case 6:
                 addInfoCard(page, "Các module chưa được hỗ trợ trong bản runtime hiện tại",
@@ -589,6 +603,7 @@ public final class WlzInGameHud {
         list.setOrientation(LinearLayout.VERTICAL);
 
         for (int i = 0; i < NAMES.length; i++) {
+            if (!WlzKeyMapper.isActionImplemented(i)) continue;
             final int action = i;
             LinearLayout row = new LinearLayout(activity);
             row.setGravity(Gravity.CENTER_VERTICAL);
@@ -599,8 +614,8 @@ public final class WlzInGameHud {
             row.addView(text(NAMES[i], 10, Color.rgb(35,35,38), true),
                     new LinearLayout.LayoutParams(0, dp(46), 1));
 
-            Button key = button(WlzKeyMapper.keyName(
-                    WlzKeyMapper.getKey(activity, action)));
+            Button key = button(captureAction == action ? "ĐANG CHỜ..."
+                    : WlzKeyMapper.keyName(WlzKeyMapper.getKey(activity, action)));
             key.setTextColor(ORANGE);
             key.setOnClickListener(v -> {
                 captureAction = action;
