@@ -1,6 +1,10 @@
 package com.wlz.client;
 
+import android.util.Log;
+
+/** JNI bridge for the WLZ native runtime. Keep this class name in sync with JNI exports. */
 public final class WlzRuntimeBridge {
+    private static final String TAG = "WLZRuntimeBridge";
     private static volatile boolean loaded;
 
     private WlzRuntimeBridge() {}
@@ -10,9 +14,11 @@ public final class WlzRuntimeBridge {
         try {
             System.loadLibrary("wlzruntime");
             loaded = true;
+            Log.i(TAG, "Loaded libwlzruntime.so");
             return true;
-        } catch (Throwable ignored) {
+        } catch (Throwable error) {
             loaded = false;
+            Log.e(TAG, "Could not load libwlzruntime.so", error);
             return false;
         }
     }
