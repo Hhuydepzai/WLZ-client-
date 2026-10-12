@@ -322,10 +322,24 @@ public final class WlzInGameHud {
     private void openRadialMenu() {
         closeRadialMenu();
         radialVisible = true;
-        int availableW = Math.max(dp(320), decor.getWidth() - dp(24));
-        int availableH = Math.max(dp(300), decor.getHeight() - dp(24));
+        // Clamp the panel to the actual visible host size. The old dp(320)/dp(300)
+        // minimum could exceed small or split-screen displays and shift the panel
+        // beyond the left/right or top/bottom edge.
+        int screenW = decor.getWidth();
+        int screenH = decor.getHeight();
+        android.util.DisplayMetrics metrics = activity.getResources().getDisplayMetrics();
+        if (screenW <= 0) screenW = metrics.widthPixels;
+        if (screenH <= 0) screenH = metrics.heightPixels;
+
+        int marginX = Math.min(dp(12), Math.max(0, (screenW - dp(1)) / 2));
+        int marginY = Math.min(dp(12), Math.max(0, (screenH - dp(1)) / 2));
+        int availableW = Math.max(dp(1), screenW - 2 * marginX);
+        int availableH = Math.max(dp(1), screenH - 2 * marginY);
         int width = Math.min(dp(820), availableW);
         int height = Math.min(dp(560), availableH);
+        int navWidth = Math.min(dp(132),
+                Math.max(dp(76), Math.round(width * 0.30f)));
+        navWidth = Math.min(navWidth, Math.max(dp(1), width - dp(104)));
 
         radialMenu = new FrameLayout(activity);
         radialMenu.setBackground(round(Color.argb(248, 10, 11, 15), ORANGE, 2, 16));
@@ -358,10 +372,20 @@ public final class WlzInGameHud {
         LinearLayout body = new LinearLayout(activity);
         body.setOrientation(LinearLayout.HORIZONTAL);
         body.setGravity(Gravity.FILL);
+        // Keep the category rail inside the panel on narrow displays, and let it
+        // scroll vertically when the available height cannot show all categories.
         categoryNav = new LinearLayout(activity);
         categoryNav.setOrientation(LinearLayout.VERTICAL);
-        categoryNav.setPadding(0, dp(2), dp(9), 0);
-        body.addView(categoryNav, new LinearLayout.LayoutParams(dp(132), -1));
+        categoryNav.setPadding(0, dp(2), dp(5), 0);
+        ScrollView navScroll = new ScrollView(activity);
+        navScroll.setFillViewport(true);
+        navScroll.setVerticalScrollBarEnabled(false);
+        navScroll.setHorizontalScrollBarEnabled(false);
+        navScroll.addView(categoryNav,
+                new ScrollView.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT));
+        body.addView(navScroll, new LinearLayout.LayoutParams(navWidth, -1));
 
         View divider = new View(activity);
         divider.setBackgroundColor(STROKE);
@@ -377,6 +401,7 @@ public final class WlzInGameHud {
         for (int i = 0; i < GUI_CATEGORIES.length; i++) {
             final int category = i;
             Button item = button(GUI_CATEGORIES[i]);
+            item.setTextSize(width < dp(440) ? 9 : 10);
             item.setTag(Integer.valueOf(category));
             item.setGravity(Gravity.CENTER_VERTICAL | Gravity.LEFT);
             item.setPadding(dp(10), 0, dp(4), 0);
