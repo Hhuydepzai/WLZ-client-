@@ -288,11 +288,20 @@ def _read_uleb128(buf, pos):
 def _build_string_pool(strings, flags):
     data = bytearray()
     offsets = []
-    if flags & 0x100:
+
+    # WLZ strings are appended to the original pool, so its sorted flag is no
+    # longer guaranteed to be true. Clear SORTED_FLAG to avoid invalid
+    # binary-search assumptions when Android resolves strings by value.
+    flags &= ~0x1
+
+    if flags & 0x100:  # UTF8_FLAG
         for value in strings:
             encoded = value.encode("utf-8")
+            # Android stores both UTF-16 code-unit length and UTF-8 byte length.
+            # Python len(value) differs for supplementary Unicode characters.
+            utf16_units = len(value.encode("utf-16le")) // 2
             offsets.append(len(data))
-            data += _uleb128(len(value))
+            data += _uleb128(utf16_units)
             data += _uleb128(len(encoded))
             data += encoded + b"\x00"
     else:
@@ -318,8 +327,6 @@ def _build_string_pool(strings, flags):
         chunk += struct.pack("<I", offset)
     chunk += data
     return bytes(chunk)
-
-
 def _xml_chunks(xml):
     chunks = []
     pos = 8
