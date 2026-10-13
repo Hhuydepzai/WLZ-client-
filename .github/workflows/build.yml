@@ -86,7 +86,7 @@ jobs:
         if: steps.source_mode.outputs.reuse == 'true'
         uses: actions/download-artifact@v4
         with:
-          name: WLZ-Client-2.3.6-APK
+          name: WLZ-Client-2.3.7-APK
           run-id: 38118766959
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
@@ -97,15 +97,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          APK="dist/reused/WLZ-Client-2.3.6.apk"
+          APK="dist/reused/WLZ-Client-2.3.7.apk"
           test -s "$APK"
           unzip -tq "$APK"
           unzip -Z1 "$APK" | grep -q '^assets/'
           unzip -Z1 "$APK" | grep -qx 'resources.arsc'
           unzip -Z1 "$APK" | grep -qx 'lib/arm64-v8a/libminecraftpe.so'
           mkdir -p dist
-          cp "$APK" dist/WLZ-Client-2.3.6.apk
-          sha256sum dist/WLZ-Client-2.3.6.apk | tee dist/SHA256SUMS.txt
+          cp "$APK" dist/WLZ-Client-2.3.7.apk
+          sha256sum dist/WLZ-Client-2.3.7.apk | tee dist/SHA256SUMS.txt
           echo "Reused previously signature-verified full client APK for a direct single-file release."
 
       - name: Download complete Minecraft base APK
@@ -458,18 +458,23 @@ jobs:
             -alias wlz -keyalg RSA -keysize 2048 -validity 10000 \
             -dname "CN=WLZ Client,O=WLZ"
           "${APKSIGNER}" sign --ks dist/wlz-ci.jks --ks-pass pass:wlzclient \
-            --key-pass pass:wlzclient --out dist/WLZ-Client-2.3.6.apk \
+            --key-pass pass:wlzclient --out dist/WLZ-Client-2.3.7.apk \
             dist/WLZ-Minecraft-aligned.apk
-          "${APKSIGNER}" verify --verbose dist/WLZ-Client-2.3.6.apk
+          "${APKSIGNER}" verify --verbose dist/WLZ-Client-2.3.7.apk
 
-          BADGING="$("${AAPT2}" dump badging dist/WLZ-Client-2.3.6.apk)"
+          BADGING="$("${AAPT2}" dump badging dist/WLZ-Client-2.3.7.apk)"
           printf '%s\n' "$BADGING" | grep -q "package: name='com.wlzclient.launcher'"
-          unzip -tq dist/WLZ-Client-2.3.6.apk
-          unzip -Z1 dist/WLZ-Client-2.3.6.apk | grep -q '^assets/'
-          unzip -Z1 dist/WLZ-Client-2.3.6.apk | grep -qx 'resources.arsc'
-          unzip -Z1 dist/WLZ-Client-2.3.6.apk | grep -qx 'lib/arm64-v8a/libminecraftpe.so'
-          test -s dist/WLZ-Client-2.3.6.apk
-          sha256sum dist/WLZ-Client-2.3.6.apk | tee dist/SHA256SUMS.txt
+          "${AAPT2}" dump xmltree dist/WLZ-Client-2.3.7.apk --file AndroidManifest.xml > dist/manifest-tree.txt
+          grep -q 'E: manifest' dist/manifest-tree.txt
+          grep -q 'E: application' dist/manifest-tree.txt
+          grep -q 'com.wlz.client.WlzApplication' dist/manifest-tree.txt
+          grep -q 'com.wlz.client.MainActivity' dist/manifest-tree.txt
+          unzip -tq dist/WLZ-Client-2.3.7.apk
+          unzip -Z1 dist/WLZ-Client-2.3.7.apk | grep -q '^assets/'
+          unzip -Z1 dist/WLZ-Client-2.3.7.apk | grep -qx 'resources.arsc'
+          unzip -Z1 dist/WLZ-Client-2.3.7.apk | grep -qx 'lib/arm64-v8a/libminecraftpe.so'
+          test -s dist/WLZ-Client-2.3.7.apk
+          sha256sum dist/WLZ-Client-2.3.7.apk | tee dist/SHA256SUMS.txt
 
       - name: Show artifacts
         run: find dist -maxdepth 1 -type f -printf '%f %s bytes\n' | sort
@@ -477,8 +482,8 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: WLZ-Client-2.3.6-APK
-          path: dist/WLZ-Client-2.3.6.apk
+          name: WLZ-Client-2.3.7-APK
+          path: dist/WLZ-Client-2.3.7.apk
           if-no-files-found: error
 
       - name: Publish one direct APK download
@@ -487,11 +492,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TAG="v2.3.6"
+          TAG="v2.3.7"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/WLZ-Client-2.3.6.apk --clobber
+            gh release upload "$TAG" dist/WLZ-Client-2.3.7.apk --clobber
           else
-            gh release create "$TAG" dist/WLZ-Client-2.3.6.apk \
-              --title "WLZ Client 2.3.6" \
+            gh release create "$TAG" dist/WLZ-Client-2.3.7.apk \
+              --title "WLZ Client 2.3.7" \
               --notes "WLZ Client ARM64 APK. Built and APK-signature verified by GitHub Actions. Back up Minecraft worlds before replacing test builds."
           fi
