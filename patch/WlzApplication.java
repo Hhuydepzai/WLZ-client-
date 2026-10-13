@@ -6,9 +6,9 @@ import android.os.Bundle;
 /**
  * Runs inside the original Apollon/Minecraft process.  Its actual superclass
  * is the original Apollon V6.6 application class. The helper is compiled against
- * a compile-only stub and never bundles a replacement class.
+ * a compile-only stub for the actual PairIP application class in the source DEX.
  */
-public final class WlzApplication extends com.zihao_il.MinecraftApplication {
+public final class WlzApplication extends com.pairip.application.Application {
     private static final long HUD_ATTACH_DELAY_MS = 1500L;
 
     private final ActivityLifecycleCallbacks callbacks = new ActivityLifecycleCallbacks() {
@@ -38,7 +38,7 @@ public final class WlzApplication extends com.zihao_il.MinecraftApplication {
     };
 
     @Override public void onCreate() {
-        // Preserve Apollon's original startup/bootstrap flow.
+        // Preserve the original PairIP startup/bootstrap flow.
         super.onCreate();
         WlzModuleManager.initialize(this);
         // Do not gate this on a :mc process name: the supplied V6.6 base APK
