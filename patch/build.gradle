@@ -41,7 +41,7 @@ android {
     }
 
     dependencies {
-        // Compile-only stub for Apollon's existing MinecraftApplication superclass.
+        // Compile-only stub for the original PairIP Application superclass.
         // The real class comes from the original Apollon base DEX.
         compileOnly files('minecraft-application-stub.jar')
     }
