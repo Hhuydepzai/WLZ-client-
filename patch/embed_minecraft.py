@@ -499,12 +499,13 @@ def patch_manifest(base_manifest):
     # declarations and causing install/runtime failures.
     strings, old_pool_size, flags, pool_header_size = _read_string_pool(base_manifest)
     original_package = "com.mojang.minecraftpe"
-    package_id = "com.wlzclient.launcher"
+    package_id = "com.mojang.minecraftpe"
     if len(original_package) != len(package_id):
         raise SystemExit("WLZ package ID must stay the same length for stable pool refs")
 
-    # Keep every original string index stable. Rewrite only the exact package
-    # string and provider/permission authorities, never activity class names.
+    # Keep every original string index stable. Retain the original Minecraft
+    # package ID for runtime compatibility; authority rewriting is now a no-op.
+    # Never rewrite runtime activity class names.
     authority_suffixes = {
         ".DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
         ".fileprovider",

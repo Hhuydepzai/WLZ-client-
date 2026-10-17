@@ -19,14 +19,14 @@ import zlib
 from pathlib import Path
 
 BRAND = [
-    (b"Apollon Client v6.6", b"WLZ Client v2.3.7  "),
-    (b"Apollon Chem v6.6", b"WLZ Client v2.3.7"),
+    (b"Apollon Client v6.6", b"WLZ Client v2.3.8  "),
+    (b"Apollon Chem v6.6", b"WLZ Client v2.3.8"),
     (b"Apollon Client", b"WLZ Client    "),
     (b"Apollon Chem", b"WLZ Client  "),
 ]
-PACKAGE_PATHS = [
-    (b"Android/data/com.mojang.minecraftpe", b"Android/data/com.wlzclient.launcher"),
-]
+# The final APK retains com.mojang.minecraftpe. Do not rewrite Android/data
+# paths to a different package name or the runtime will search the wrong folder.
+PACKAGE_PATHS = []
 SCAN_SUFFIXES = {".dex", ".so", ".arsc", ".xml", ".json", ".txt"}
 
 # These names are existing Apollon icon resources. Replace their PNG bytes

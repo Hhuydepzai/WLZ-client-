@@ -70,17 +70,10 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
-      - name: Decide build source
+      - name: Build from current compatibility sources
         id: source_mode
         shell: bash
-        env:
-          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
-        run: |
-          if [[ "$GITHUB_EVENT_NAME" == "push" && "$COMMIT_MESSAGE" == "Publish one direct APK from verified artifact" ]]; then
-            echo "reuse=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "reuse=false" >> "$GITHUB_OUTPUT"
-          fi
+        run: echo "reuse=false" >> "$GITHUB_OUTPUT"
 
       - name: Reuse previously verified APK for direct publishing
         if: steps.source_mode.outputs.reuse == 'true'
@@ -458,23 +451,23 @@ jobs:
             -alias wlz -keyalg RSA -keysize 2048 -validity 10000 \
             -dname "CN=WLZ Client,O=WLZ"
           "${APKSIGNER}" sign --ks dist/wlz-ci.jks --ks-pass pass:wlzclient \
-            --key-pass pass:wlzclient --out dist/WLZ-Client-2.3.7.apk \
+            --key-pass pass:wlzclient --out dist/WLZ-Client-2.3.8.apk \
             dist/WLZ-Minecraft-aligned.apk
-          "${APKSIGNER}" verify --verbose dist/WLZ-Client-2.3.7.apk
+          "${APKSIGNER}" verify --verbose dist/WLZ-Client-2.3.8.apk
 
-          BADGING="$("${AAPT2}" dump badging dist/WLZ-Client-2.3.7.apk)"
-          printf '%s\n' "$BADGING" | grep -q "package: name='com.wlzclient.launcher'"
-          "${AAPT2}" dump xmltree dist/WLZ-Client-2.3.7.apk --file AndroidManifest.xml > dist/manifest-tree.txt
+          BADGING="$("${AAPT2}" dump badging dist/WLZ-Client-2.3.8.apk)"
+          printf '%s\n' "$BADGING" | grep -q "package: name='com.mojang.minecraftpe'"
+          "${AAPT2}" dump xmltree dist/WLZ-Client-2.3.8.apk --file AndroidManifest.xml > dist/manifest-tree.txt
           grep -q 'E: manifest' dist/manifest-tree.txt
           grep -q 'E: application' dist/manifest-tree.txt
           grep -q 'com.wlz.client.WlzApplication' dist/manifest-tree.txt
           grep -q 'com.wlz.client.MainActivity' dist/manifest-tree.txt
-          unzip -tq dist/WLZ-Client-2.3.7.apk
-          unzip -Z1 dist/WLZ-Client-2.3.7.apk | grep -q '^assets/'
-          unzip -Z1 dist/WLZ-Client-2.3.7.apk | grep -qx 'resources.arsc'
-          unzip -Z1 dist/WLZ-Client-2.3.7.apk | grep -qx 'lib/arm64-v8a/libminecraftpe.so'
-          test -s dist/WLZ-Client-2.3.7.apk
-          sha256sum dist/WLZ-Client-2.3.7.apk | tee dist/SHA256SUMS.txt
+          unzip -tq dist/WLZ-Client-2.3.8.apk
+          unzip -Z1 dist/WLZ-Client-2.3.8.apk | grep -q '^assets/'
+          unzip -Z1 dist/WLZ-Client-2.3.8.apk | grep -qx 'resources.arsc'
+          unzip -Z1 dist/WLZ-Client-2.3.8.apk | grep -qx 'lib/arm64-v8a/libminecraftpe.so'
+          test -s dist/WLZ-Client-2.3.8.apk
+          sha256sum dist/WLZ-Client-2.3.8.apk | tee dist/SHA256SUMS.txt
 
       - name: Show artifacts
         run: find dist -maxdepth 1 -type f -printf '%f %s bytes\n' | sort
@@ -483,7 +476,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: WLZ-Client-2.3.7-APK
-          path: dist/WLZ-Client-2.3.7.apk
+          path: dist/WLZ-Client-2.3.8.apk
           if-no-files-found: error
 
       - name: Publish one direct APK download
@@ -492,11 +485,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TAG="v2.3.7"
+          TAG="v2.3.8"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/WLZ-Client-2.3.7.apk --clobber
+            gh release upload "$TAG" dist/WLZ-Client-2.3.8.apk --clobber
           else
-            gh release create "$TAG" dist/WLZ-Client-2.3.7.apk \
-              --title "WLZ Client 2.3.7" \
+            gh release create "$TAG" dist/WLZ-Client-2.3.8.apk \
+              --title "WLZ Client 2.3.8" \
               --notes "WLZ Client ARM64 APK. Built and APK-signature verified by GitHub Actions. Back up Minecraft worlds before replacing test builds."
           fi

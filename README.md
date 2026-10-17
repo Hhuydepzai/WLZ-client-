@@ -1,8 +1,8 @@
-# WLZ Client v2.3.1
+# WLZ Client v2.3.8
 
 - Android 9+ (minSdk 28)
 - ARM64 only
-- Separate Android package ID: `com.wlz.client.launcher` (does not replace `com.mojang.minecraftpe`)
+- Keeps Android package ID `com.mojang.minecraftpe` for runtime compatibility; the visible app name and icon are WLZ Client.
 - Launcher, Minecraft Activity, WLZ HUD, circular ClickGUI and key mapper are packaged in one APK.
 - The runtime build must preserve the source APK's `assets/` and `resources.arsc`.
 
@@ -27,6 +27,8 @@ The complete source APK must be attached to the runtime Release for the final bu
 
 ## Packaging/runtime fix
 
-The packager now patches the original base APK's binary manifest instead of replacing it with the helper manifest. This preserves the source Minecraft permissions, providers, metadata, resource IDs, asset bundle and native bootstrap declarations. WLZ uses the separate package ID `com.wlzclient.launcher`; original provider authorities are remapped while component class names remain unchanged. The WLZ launcher is registered as the launcher entry and the original Minecraft activity keeps its remaining intent filters.
+The packager now patches the original base APK's binary manifest instead of replacing it with the helper manifest. This preserves the source Minecraft permissions, providers, metadata, resource IDs, asset bundle and native bootstrap declarations. WLZ keeps the source package ID `com.mojang.minecraftpe`; the visible app label and launcher icon are rebranded, and original runtime class names remain unchanged. The WLZ launcher is registered as the launcher entry and the original Minecraft activity keeps its remaining intent filters.
 
 The Application extension is compiled against a compile-only stub for `com.pairip.application.Application`, the PairIP bootstrap observed in the supplied Apollon runtime DEX. The stub is not packaged in the final APK. Using a superclass not present in the base DEX can crash the app as soon as Android creates the Application object.
+
+The merged APK intentionally retains the original package ID `com.mojang.minecraftpe` because changing it can break protected startup/runtime assumptions. It replaces an app installed under that package ID rather than living alongside it. Back up Minecraft worlds before uninstalling or replacing any existing installation.
