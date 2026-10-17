@@ -417,6 +417,27 @@ def _set_string_attribute(xml, node, strings, attr_name, value_index):
         return
     raise SystemExit("AndroidManifest attribute not found: " + attr_name)
 
+def _set_integer_attribute(xml, node, strings, attr_name, value):
+    """Set an existing binary manifest attribute to a plain integer value."""
+    start = node["start"]
+    attr_start = struct.unpack_from("<H", xml, start + 24)[0]
+    attr_size = struct.unpack_from("<H", xml, start + 26)[0]
+    count = struct.unpack_from("<H", xml, start + 28)[0]
+    base = start + 16 + attr_start
+    for i in range(count):
+        p = base + i * attr_size
+        name_idx = struct.unpack_from("<I", xml, p + 4)[0]
+        if name_idx >= len(strings) or strings[name_idx] != attr_name:
+            continue
+        # TYPE_INT_DEC, with no raw string value.
+        struct.pack_into("<I", xml, p + 8, 0xFFFFFFFF)
+        struct.pack_into("<H", xml, p + 12, 8)
+        xml[p + 14] = 0
+        xml[p + 15] = 0x10
+        struct.pack_into("<I", xml, p + 16, int(value))
+        return
+    raise SystemExit("AndroidManifest integer attribute not found: " + attr_name)
+
 
 def _start_element(strings, tag, attributes, android_ns):
     tag_idx = strings.index(tag)
@@ -531,6 +552,8 @@ def patch_manifest(base_manifest):
     app_label_idx = add_string("WLZ Client")
     add_string("com.wlz.client.MainActivity")
     add_string("com.wlz.client.WlzControlEditorActivity")
+    add_string("uses-sdk")
+    add_string("minSdkVersion")
 
     pool_start = 8
     pool_old_end = pool_start + old_pool_size
@@ -544,6 +567,13 @@ def patch_manifest(base_manifest):
     app = next((n for n in nodes if n["name"] == "application"), None)
     if root is None or app is None:
         raise SystemExit("Original manifest has no root or application node")
+    # The final APK is based on the original Minecraft manifest rather than
+    # the helper manifest, so patch its actual minSdk to Android 8.0 / API 26.
+    # Keep targetSdk and all other source runtime settings unchanged.
+    uses_sdk = next((n for n in nodes if n["name"] == "uses-sdk" and n["parent"] is root), None)
+    if uses_sdk is None:
+        raise SystemExit("Original manifest has no uses-sdk node; cannot guarantee Android 8 compatibility")
+    _set_integer_attribute(xml, uses_sdk, strings, "minSdkVersion", 26)
     _set_string_attribute(xml, root, strings, "package", strings.index(package_id))
     _set_string_attribute(xml, app, strings, "name", app_name_idx)
     _set_string_attribute(xml, app, strings, "label", app_label_idx)
