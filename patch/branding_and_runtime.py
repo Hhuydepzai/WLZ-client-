@@ -19,10 +19,10 @@ import zlib
 from pathlib import Path
 
 BRAND = [
-    (b"Apollon Client v6.6", b"WLZ Client v2.3.9  "),
-    (b"Apollon Chem v6.6", b"WLZ Client v2.3.9"),
-    (b"Apollon Client", b"WLZ Client    "),
-    (b"Apollon Chem", b"WLZ Client  "),
+    (b"Apollon Client v6.6", b"WH Launcher v2.4.0 "),
+    (b"Apollon Chem v6.6", b"WH Launcher 2.4.0"),
+    (b"Apollon Client", b"WH Launcher   "),
+    (b"Apollon Chem", b"WH Launcher "),
 ]
 # The final APK retains com.mojang.minecraftpe. Do not rewrite Android/data
 # paths to a different package name or the runtime will search the wrong folder.
@@ -62,8 +62,8 @@ def icon_size_for_path(name: str):
     return 192
 
 
-def make_wlz_icon_png(size: int) -> bytes:
-    """Create a compact orange WLZ + crown app icon using only stdlib."""
+def make_wh_icon_png(size: int) -> bytes:
+    """Create a compact orange WH + crown app icon using only stdlib."""
     dark = (8, 9, 12, 255)
     orange = (255, 112, 0, 255)
     gold = (255, 190, 55, 255)
@@ -111,11 +111,12 @@ def make_wlz_icon_png(size: int) -> bytes:
     paint_polygon([(0.33,.17),(.43,.28),(.50,.14),(.57,.28),(.67,.17),(.63,.36),(.37,.36)], orange)
     paint_polygon([(0.38,.22),(.44,.29),(.50,.18),(.56,.29),(.62,.22),(.60,.32),(.40,.32)], gold)
 
-    # Thick angular WLZ wordmark; dark under-stroke adds separation at small size.
+    # Thick angular WH wordmark; dark under-stroke adds separation at small size.
     glyphs = [
-        [(0.13,.46),(.22,.46),(.26,.61),(.32,.49),(.38,.61),(.42,.46),(.50,.46),(.43,.79),(.35,.79),(.32,.69),(.28,.79),(.21,.79)],
-        [(.47,.46),(.56,.46),(.56,.71),(.63,.71),(.63,.80),(.47,.80)],
-        [(.61,.46),(.86,.46),(.86,.53),(.70,.71),(.86,.71),(.86,.80),(.60,.80),(.60,.73),(.76,.54),(.61,.54)],
+        # W
+        [(.12,.46),(.22,.46),(.27,.68),(.34,.51),(.41,.68),(.46,.46),(.56,.46),(.47,.80),(.39,.80),(.34,.67),(.29,.80),(.21,.80)],
+        # H
+        [(.59,.46),(.68,.46),(.68,.59),(.79,.59),(.79,.46),(.88,.46),(.88,.80),(.79,.80),(.79,.68),(.68,.68),(.68,.80),(.59,.80)],
     ]
     for poly in glyphs:
         expanded = [(0.50+(x-.50)*1.045, 0.63+(y-.63)*1.045) for x,y in poly]
@@ -123,7 +124,7 @@ def make_wlz_icon_png(size: int) -> bytes:
         paint_polygon(poly, orange)
     # Gold cut facets, kept sparse to avoid a cluttered thumbnail.
     paint_polygon([(.16,.49),(.21,.49),(.25,.62),(.22,.62)], gold)
-    paint_polygon([(.65,.49),(.81,.49),(.78,.52),(.66,.52)], gold)
+    paint_polygon([(.63,.49),(.84,.49),(.81,.52),(.64,.52)], gold)
 
     raw = bytearray()
     for y in range(size):
@@ -177,7 +178,7 @@ def patch_apk(path: Path) -> dict:
                 suffix = Path(info.filename).suffix.lower()
                 icon_size = icon_size_for_path(info.filename)
                 if icon_size is not None:
-                    data = make_wlz_icon_png(icon_size)
+                    data = make_wh_icon_png(icon_size)
                     icon_count += 1
                     changed.append(info.filename)
                 if suffix in SCAN_SUFFIXES:
@@ -232,7 +233,7 @@ def patch_apk(path: Path) -> dict:
     }
     if icon_count == 0:
         print("WARNING: no known Apollon launcher PNG path matched; resources.arsc was preserved.", flush=True)
-    print("WLZ branding/path patch:", result, flush=True)
+    print("WH Launcher branding/path patch:", result, flush=True)
     return result
 
 

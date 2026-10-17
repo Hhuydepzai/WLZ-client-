@@ -549,7 +549,7 @@ def patch_manifest(base_manifest):
 
     add_string(package_id)
     app_name_idx = add_string("com.wlz.client.WlzApplication")
-    app_label_idx = add_string("WLZ Client")
+    app_label_idx = add_string("WH Launcher")
     add_string("com.wlz.client.MainActivity")
     add_string("com.wlz.client.WlzControlEditorActivity")
     add_string("uses-sdk")

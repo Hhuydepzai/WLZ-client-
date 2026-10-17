@@ -92,10 +92,10 @@ public final class MainActivity extends Activity {
 
         page.addView(buildQuickActions(), top(18, -2));
 
-        TextView foot = text("WLZ CLIENT  •  BEDROCK ARM64", 9, Color.rgb(93, 98, 107), true);
+        TextView foot = text("WH LAUNCHER  •  BEDROCK ARM64", 9, Color.rgb(93, 98, 107), true);
         foot.setGravity(Gravity.CENTER);
         page.addView(foot, top(20, -2));
-        TextView foot2 = text("Giao diện WLZ • Không sửa dữ liệu thế giới", 9, Color.rgb(81, 86, 95), false);
+        TextView foot2 = text("WH Launcher • Không sửa dữ liệu thế giới", 9, Color.rgb(81, 86, 95), false);
         foot2.setGravity(Gravity.CENTER);
         page.addView(foot2, top(5, -2));
 
@@ -111,11 +111,11 @@ public final class MainActivity extends Activity {
         LinearLayout labels = new LinearLayout(this);
         labels.setOrientation(LinearLayout.VERTICAL);
         labels.setPadding(dp(12), 0, 0, 0);
-        labels.addView(text("WLZ CLIENT", 18, TEXT, true), lp(-1, -2));
+        labels.addView(text("WH LAUNCHER", 18, TEXT, true), lp(-1, -2));
         labels.addView(text("MINECRAFT BEDROCK", 9, MUTED, true), top(2, -2));
         row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView version = text("V2.3.9", 9, ORANGE, true);
+        TextView version = text("V2.4.0", 9, ORANGE, true);
         version.setGravity(Gravity.CENTER);
         version.setPadding(dp(11), dp(7), dp(11), dp(7));
         version.setBackground(round(PANEL_2, STROKE, 1, 20));
@@ -143,7 +143,7 @@ public final class MainActivity extends Activity {
         card.addView(headline, top(7, -2));
 
         TextView description = text(
-                "Khởi chạy Minecraft và sử dụng nút WLZ tròn trong game để mở ClickGUI.",
+                "Khởi chạy Minecraft và sử dụng nút WH tròn trong game để mở ClickGUI.",
                 11, MUTED, false);
         description.setLineSpacing(dp(3), 1.0f);
         card.addView(description, top(7, -2));
@@ -186,7 +186,7 @@ public final class MainActivity extends Activity {
         panel.setPadding(dp(14), dp(14), dp(14), dp(14));
         panel.setBackground(round(PANEL, STROKE, 1, 18));
 
-        TextView title = text("ĐIỀU KHIỂN WLZ", 11, TEXT, true);
+        TextView title = text("ĐIỀU KHIỂN WH", 11, TEXT, true);
         panel.addView(title);
 
         TextView info = text(
@@ -205,7 +205,7 @@ public final class MainActivity extends Activity {
         functions.setTextColor(ORANGE);
         functions.setBackground(round(PANEL_2, STROKE, 1, 12));
         functions.setOnClickListener(v -> Toast.makeText(this,
-                "Trong game, chạm nút tròn WLZ rồi mở tab Functions hoặc Controls.",
+                "Trong game, chạm nút tròn WH rồi mở tab Functions hoặc Controls.",
                 Toast.LENGTH_LONG).show());
         panel.addView(functions, top(8, dp(44)));
 
