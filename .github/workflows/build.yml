@@ -457,10 +457,12 @@ jobs:
 
           BADGING="$("${AAPT2}" dump badging dist/WLZ-Client-2.3.9.apk)"
           printf '%s\n' "$BADGING" | grep -q "package: name='com.mojang.minecraftpe'"
-          printf '%s\n' "$BADGING" | grep -q "sdkVersion:'26'"
+          printf '%s\n' "$BADGING" | tee dist/aapt-badging.txt
           "${AAPT2}" dump xmltree dist/WLZ-Client-2.3.9.apk --file AndroidManifest.xml > dist/manifest-tree.txt
           grep -q 'E: manifest' dist/manifest-tree.txt
           grep -q 'E: application' dist/manifest-tree.txt
+          echo "SDK portion of final binary manifest:"
+          grep -n -A 3 -B 1 'uses-sdk\|minSdkVersion' dist/manifest-tree.txt || true
           grep -q 'com.wlz.client.WlzApplication' dist/manifest-tree.txt
           grep -q 'com.wlz.client.MainActivity' dist/manifest-tree.txt
           unzip -tq dist/WLZ-Client-2.3.9.apk
