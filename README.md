@@ -1,9 +1,9 @@
-# WH Launcher v2.4.0
+# WLZ Client v2.3.9
 
 - Android 8.0+ (API 26)
 - ARM64 (arm64-v8a) devices only
-- Keeps Android package ID `com.mojang.minecraftpe` for runtime compatibility; the visible app name and icon are WH Launcher.
-- Launcher, Minecraft Activity, WH HUD, circular ClickGUI and key mapper are packaged in one APK.
+- Keeps Android package ID `com.mojang.minecraftpe` for runtime compatibility; the visible app name and icon are WLZ Client.
+- Launcher, Minecraft Activity, WLZ HUD, circular ClickGUI and key mapper are packaged in one APK.
 - The runtime build must preserve the source APK's `assets/` and `resources.arsc`.
 
 ## Important runtime requirement
@@ -18,7 +18,7 @@ The build now refuses to publish that incomplete package. The GitHub Release use
 - `classes*.dex`
 - `lib/arm64-v8a/libminecraftpe.so`
 
-The embed step preserves the source APK's assets and resource table, inserts the WLZ helper DEX/native library, and retains the original runtime package ID while applying the WH Launcher label/icon. It also patches the final binary manifest minimum SDK to API 26 (Android 8.0). CI validates the final ZIP, package ID, assets, resource table and ARM64 library before upload.
+The embed step preserves the source APK's assets and resource table, inserts the WLZ helper DEX/native library, and retains the original runtime package ID while applying the WLZ label/icon. It also patches the final binary manifest minimum SDK to API 26 (Android 8.0). CI validates the final ZIP, package ID, assets, resource table and ARM64 library before upload.
 
 ## Build status
 
@@ -27,7 +27,7 @@ The complete source APK must be attached to the runtime Release for the final bu
 
 ## Packaging/runtime fix
 
-The packager now patches the original base APK's binary manifest instead of replacing it with the helper manifest. This preserves the source Minecraft permissions, providers, metadata, resource IDs, asset bundle and native bootstrap declarations, while setting the minimum supported SDK to API 26 (Android 8.0). WH Launcher keeps the source package ID `com.mojang.minecraftpe`; the visible app label and launcher icon are rebranded, and original runtime class names remain unchanged. The WH Launcher is registered as the launcher entry and the original Minecraft activity keeps its remaining intent filters.
+The packager now patches the original base APK's binary manifest instead of replacing it with the helper manifest. This preserves the source Minecraft permissions, providers, metadata, resource IDs, asset bundle and native bootstrap declarations, while setting the minimum supported SDK to API 26 (Android 8.0). WLZ keeps the source package ID `com.mojang.minecraftpe`; the visible app label and launcher icon are rebranded, and original runtime class names remain unchanged. The WLZ launcher is registered as the launcher entry and the original Minecraft activity keeps its remaining intent filters.
 
 The Application extension is compiled against a compile-only stub for `com.pairip.application.Application`, the PairIP bootstrap observed in the supplied Apollon runtime DEX. The stub is not packaged in the final APK. Using a superclass not present in the base DEX can crash the app as soon as Android creates the Application object.
 
