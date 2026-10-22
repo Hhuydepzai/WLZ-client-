@@ -1,8 +1,8 @@
-# WLZ Client v2.4.0
+# WLZ Client v2.4.1 (side-by-side package variant)
 
 - Android 8.0+ (API 26)
 - ARM64 (arm64-v8a) devices only
-- Keeps Android package ID `com.mojang.minecraftpe` for runtime compatibility; the visible app name and icon are WLZ Client.
+- Uses Android package ID `com.wlzclient.launcher` so it can be installed alongside the official Minecraft package; the embedded native runtime still launches the fully-qualified `com.mojang.minecraftpe.MainActivity` class.
 - Launcher, Minecraft Activity, WLZ HUD, circular ClickGUI and key mapper are packaged in one APK.
 - The runtime build must preserve the source APK's `assets/` and `resources.arsc`.
 
@@ -18,7 +18,7 @@ The build now refuses to publish that incomplete package. The GitHub Release use
 - `classes*.dex`
 - `lib/arm64-v8a/libminecraftpe.so`
 
-The embed step preserves the source APK's assets and resource table, inserts the WLZ helper DEX/native library, and retains the original runtime package ID while applying the WLZ label/icon. It also patches the final binary manifest minimum SDK to API 26 (Android 8.0). CI validates the final ZIP, package ID, assets, resource table and ARM64 library before upload.
+The embed step preserves the source APK's assets and resource table, inserts the WLZ helper DEX/native library, rewrites the Android application ID and known app-storage/provider identifiers to `com.wlzclient.launcher`, and applies the WLZ label/icon. It also patches the final binary manifest minimum SDK to API 26 (Android 8.0). CI validates the final ZIP, package ID, assets, resource table and ARM64 library before upload.
 
 ## Build status
 
@@ -27,14 +27,14 @@ The complete source APK must be attached to the runtime Release for the final bu
 
 ## Packaging/runtime fix
 
-The packager now patches the original base APK's binary manifest instead of replacing it with the helper manifest. This preserves the source Minecraft permissions, providers, metadata, resource IDs, asset bundle and native bootstrap declarations, while setting the minimum supported SDK to API 26 (Android 8.0). WLZ keeps the source package ID `com.mojang.minecraftpe`; the visible app label and launcher icon are rebranded, and original runtime class names remain unchanged. The WLZ launcher is registered as the launcher entry and the original Minecraft activity keeps its remaining intent filters.
+The packager now patches the original base APK's binary manifest instead of replacing it with the helper manifest. This preserves the source Minecraft permissions, providers, metadata, resource IDs, asset bundle and native bootstrap declarations, while setting the minimum supported SDK to API 26 (Android 8.0). WLZ uses package ID `com.wlzclient.launcher` while the original runtime activity/class names remain unchanged. Package storage paths and known provider authorities are rewritten where they appear as standalone identifiers. The WLZ launcher is registered as the launcher entry and the original Minecraft activity keeps its remaining intent filters.
 
 The Application extension is compiled against a compile-only stub for `com.pairip.application.Application`, the PairIP bootstrap observed in the supplied Apollon runtime DEX. The stub is not packaged in the final APK. Using a superclass not present in the base DEX can crash the app as soon as Android creates the Application object.
 
-The merged APK intentionally retains the original package ID `com.mojang.minecraftpe` because changing it can break protected startup/runtime assumptions. It replaces an app installed under that package ID rather than living alongside it. Back up Minecraft worlds before uninstalling or replacing any existing installation.
+This side-by-side variant is designed not to collide with the installed official Minecraft package. A distinct package ID can still expose assumptions in a protected native runtime, so CI package/ZIP/signature validation does not replace a real device launch test. Keep the original Minecraft installation and back up worlds before testing.
 
 
-## v2.4.0 UI/runtime changes
+## v2.4.1 side-by-side install changes
 
 - Launcher and key-mapping screens use the WLZ dark/orange visual system and a clearer, vertically scrollable layout.
 - The in-game WLZ ClickGUI opens automatically on first entry to Minecraft, with an opaque dark panel to replace the legacy purple panel visually.
