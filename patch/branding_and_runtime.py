@@ -19,14 +19,54 @@ import zlib
 from pathlib import Path
 
 BRAND = [
-    (b"Apollon Client v6.6", b"WLZ Client v2.4.0  "),
-    (b"Apollon Chem v6.6", b"WLZ Client v2.4.0"),
+    (b"Apollon Client v6.6", b"WLZ Client v2.4.1  "),
+    (b"Apollon Chem v6.6", b"WLZ Client v2.4.1"),
     (b"Apollon Client", b"WLZ Client    "),
     (b"Apollon Chem", b"WLZ Client  "),
 ]
-# The final APK retains com.mojang.minecraftpe. Do not rewrite Android/data
-# paths to a different package name or the runtime will search the wrong folder.
-PACKAGE_PATHS = []
+# The side-by-side build uses a distinct application ID and storage folder.
+# Fully-qualified Minecraft Java class names are intentionally not rewritten.
+PACKAGE_PATHS = [
+    (b"Android/data/com.mojang.minecraftpe", b"Android/data/com.wlzclient.launcher"),
+    (b"com.mojang.minecraftpe.fileprovider", b"com.wlzclient.launcher.fileprovider"),
+    (b"com.mojang.minecraftpe.firebaseinitprovider", b"com.wlzclient.launcher.firebaseinitprovider"),
+    (b"com.mojang.minecraftpe.playgamesinitprovider", b"com.wlzclient.launcher.playgamesinitprovider"),
+    (b"com.mojang.minecraftpe.androidx-startup", b"com.wlzclient.launcher.androidx-startup"),
+]
+
+PACKAGE_ID_OLD = b"com.mojang.minecraftpe"
+PACKAGE_ID_NEW = b"com.wlzclient.launcher"
+if len(PACKAGE_ID_OLD) != len(PACKAGE_ID_NEW):
+    raise RuntimeError("Side-by-side package IDs must have equal byte length")
+
+
+def replace_package_identity(data: bytes) -> tuple[bytes, int]:
+    # Replace only an exact dotted application ID, not prefixes of class names
+    # like com.mojang.minecraftpe.MainActivity or DEX descriptors.
+    total = 0
+    pattern = rb"(?<![A-Za-z0-9_.$/])" + re.escape(PACKAGE_ID_OLD) + rb"(?![A-Za-z0-9_.$/])"
+    data, n = re.subn(pattern, PACKAGE_ID_NEW, data)
+    total += n
+
+    # Also handle the same identifier stored as UTF-16LE in resource/string pools.
+    old16 = b"".join(bytes((x, 0)) for x in PACKAGE_ID_OLD)
+    new16 = b"".join(bytes((x, 0)) for x in PACKAGE_ID_NEW)
+    allowed = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.$/"
+    cursor = 0
+    while True:
+        pos = data.find(old16, cursor)
+        if pos < 0:
+            break
+        end = pos + len(old16)
+        prev_is_identifier = pos >= 2 and data[pos - 1] == 0 and data[pos - 2] in allowed
+        next_is_identifier = end + 1 < len(data) and data[end + 1] == 0 and data[end] in allowed
+        if not prev_is_identifier and not next_is_identifier:
+            data = data[:pos] + new16 + data[end:]
+            total += 1
+            cursor = end
+        else:
+            cursor = pos + 1
+    return data, total
 SCAN_SUFFIXES = {".dex", ".so", ".arsc", ".xml", ".json", ".txt"}
 
 # These names are existing Apollon icon resources. Replace their PNG bytes
@@ -165,6 +205,7 @@ def patch_apk(path: Path) -> dict:
     tmp = path.with_suffix(path.suffix + ".debrand.tmp")
     brand_count = 0
     path_count = 0
+    package_count = 0
     icon_count = 0
     changed = []
     with zipfile.ZipFile(path, "r") as source:
@@ -181,13 +222,15 @@ def patch_apk(path: Path) -> dict:
                     icon_count += 1
                     changed.append(info.filename)
                 if suffix in SCAN_SUFFIXES:
+                    data, n_package = replace_package_identity(data)
                     data, n_brand = replace_equal_length(data, BRAND)
                     data, n_paths = replace_equal_length(data, PACKAGE_PATHS)
-                    if n_brand or n_paths:
+                    if n_brand or n_paths or n_package:
                         changed.append(info.filename)
                         brand_count += n_brand
                         path_count += n_paths
-                        if info.filename.endswith(".dex") and n_brand + n_paths:
+                        package_count += n_package
+                        if info.filename.endswith(".dex") and n_brand + n_paths + n_package:
                             dex = bytearray(data)
                             patch_dex_header(dex)
                             data = bytes(dex)
@@ -226,6 +269,8 @@ def patch_apk(path: Path) -> dict:
         "apk": str(path),
         "title_replacements": brand_count,
         "package_path_replacements": path_count,
+        "package_identity_replacements": package_count,
+        "application_id": "com.wlzclient.launcher",
         "launcher_icons_replaced": icon_count,
         "modified_entries": changed,
         "zip_integrity": "OK",
