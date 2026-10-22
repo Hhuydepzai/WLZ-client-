@@ -23,7 +23,7 @@ public final class WlzLogoView extends View {
         setLayerType(View.LAYER_TYPE_SOFTWARE, null);
 
         bg.setStyle(Paint.Style.FILL);
-        bg.setColor(0xFFFFFFFF);
+        bg.setColor(0xFF090A0D);
 
         orange.setStyle(Paint.Style.FILL);
         orange.setColor(0xFFFF7200);
@@ -102,7 +102,7 @@ public final class WlzLogoView extends View {
         canvas.drawRoundRect(card, dp(24), dp(24), shadow);
         shadow.clearShadowLayer();
 
-        bg.setColor(ColorCompat.WHITE);
+        bg.setColor(0xFF090A0D);
         canvas.drawRoundRect(card, dp(24), dp(24), bg);
 
         line.setStrokeWidth(dp(2));
@@ -137,7 +137,4 @@ public final class WlzLogoView extends View {
         return value * getResources().getDisplayMetrics().density;
     }
 
-    private static final class ColorCompat {
-        static final int WHITE = 0xFFFFFFFF;
-    }
 }

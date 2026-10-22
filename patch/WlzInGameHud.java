@@ -7,6 +7,7 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
+import android.os.SystemClock;
 import android.view.Choreographer;
 import android.view.Display;
 import android.view.Gravity;
@@ -99,6 +100,45 @@ public final class WlzInGameHud {
         // corresponding module is available in this runtime.
         installKeyHook();
         applyVisuals();
+        // Replace the default Apollon overlay with the WLZ ClickGUI on first entry.
+        // The native client exposes its close control at the top-right of the landscape viewport.
+        layer.postDelayed(() -> {
+            if (activity.isFinishing() || (Build.VERSION.SDK_INT >= 17 && activity.isDestroyed())) return;
+            dismissLegacyApollonCloseButton();
+            layer.postDelayed(() -> {
+                if (!activity.isFinishing() && layer.getParent() != null && !radialVisible) {
+                    try { openRadialMenu(); }
+                    catch (Throwable error) {
+                        Log.e("WLZRuntime", "Could not open replacement WLZ ClickGUI", error);
+                    }
+                }
+            }, 220L);
+        }, 550L);
+    }
+
+    private void dismissLegacyApollonCloseButton() {
+        try {
+            int width = decor.getWidth();
+            int height = decor.getHeight();
+            if (width <= 0 || height <= 0) return;
+            // One tap to the legacy panel's close affordance. This happens once when
+            // the Minecraft Activity is first attached; the original game Activity remains.
+            float x = Math.max(dp(8), width - dp(34));
+            float y = Math.max(dp(8), Math.min(dp(25), height - dp(8)));
+            long downTime = SystemClock.uptimeMillis();
+            MotionEvent down = MotionEvent.obtain(downTime, downTime,
+                    MotionEvent.ACTION_DOWN, x, y, 0);
+            activity.dispatchTouchEvent(down);
+            down.recycle();
+            long upTime = downTime + 65L;
+            MotionEvent up = MotionEvent.obtain(downTime, upTime,
+                    MotionEvent.ACTION_UP, x, y, 0);
+            activity.dispatchTouchEvent(up);
+            up.recycle();
+            Log.i("WLZRuntime", "Requested close of legacy Apollon top-right panel control");
+        } catch (Throwable error) {
+            Log.w("WLZRuntime", "Legacy panel close request was not accepted", error);
+        }
     }
 
     public static void attach(Activity activity) {
@@ -335,14 +375,14 @@ public final class WlzInGameHud {
         int marginY = Math.min(dp(12), Math.max(0, (screenH - dp(1)) / 2));
         int availableW = Math.max(dp(1), screenW - 2 * marginX);
         int availableH = Math.max(dp(1), screenH - 2 * marginY);
-        int width = Math.min(dp(820), availableW);
-        int height = Math.min(dp(560), availableH);
+        int width = Math.min(dp(960), availableW);
+        int height = Math.min(dp(640), availableH);
         int navWidth = Math.min(dp(132),
                 Math.max(dp(76), Math.round(width * 0.30f)));
         navWidth = Math.min(navWidth, Math.max(dp(1), width - dp(104)));
 
         radialMenu = new FrameLayout(activity);
-        radialMenu.setBackground(round(Color.argb(248, 10, 11, 15), ORANGE, 2, 16));
+        radialMenu.setBackground(round(Color.rgb(9, 10, 13), ORANGE, 2, 16));
         radialMenu.setClipChildren(true);
 
         FrameLayout.LayoutParams panelParams = new FrameLayout.LayoutParams(width, height);
@@ -605,7 +645,7 @@ public final class WlzInGameHud {
         keyMapperPanel = new LinearLayout(activity);
         keyMapperPanel.setOrientation(LinearLayout.VERTICAL);
         keyMapperPanel.setPadding(dp(14), dp(14), dp(14), dp(14));
-        keyMapperPanel.setBackground(round(Color.WHITE, ORANGE, 2, 20));
+        keyMapperPanel.setBackground(round(BG, ORANGE, 2, 20));
 
         LinearLayout head = new LinearLayout(activity);
         head.setGravity(Gravity.CENTER_VERTICAL);
