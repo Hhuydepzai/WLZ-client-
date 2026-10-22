@@ -1,4 +1,4 @@
-# WLZ Client v2.3.9
+# WLZ Client v2.4.0
 
 - Android 8.0+ (API 26)
 - ARM64 (arm64-v8a) devices only
@@ -32,3 +32,12 @@ The packager now patches the original base APK's binary manifest instead of repl
 The Application extension is compiled against a compile-only stub for `com.pairip.application.Application`, the PairIP bootstrap observed in the supplied Apollon runtime DEX. The stub is not packaged in the final APK. Using a superclass not present in the base DEX can crash the app as soon as Android creates the Application object.
 
 The merged APK intentionally retains the original package ID `com.mojang.minecraftpe` because changing it can break protected startup/runtime assumptions. It replaces an app installed under that package ID rather than living alongside it. Back up Minecraft worlds before uninstalling or replacing any existing installation.
+
+
+## v2.4.0 UI/runtime changes
+
+- Launcher and key-mapping screens use the WLZ dark/orange visual system and a clearer, vertically scrollable layout.
+- The in-game WLZ ClickGUI opens automatically on first entry to Minecraft, with an opaque dark panel to replace the legacy purple panel visually.
+- The overlay makes a single best-effort tap at the old panel's top-right close control before showing the WLZ GUI. This targets the legacy native overlay; it still requires device verification because the old panel is drawn by the embedded runtime, not fully represented in Android's View hierarchy.
+- The WLZ floating control uses a dark background and orange crown/wordmark instead of a white circle.
+- The build still preserves the full base assets/, resources.arsc, Minecraft native library, and original Minecraft bootstrap classes. No claim is made that every module works until it is tested on the target device.
