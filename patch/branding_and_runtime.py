@@ -19,8 +19,8 @@ import zlib
 from pathlib import Path
 
 BRAND = [
-    (b"Apollon Client v6.6", b"WLZ Client v2.4.0  "),
-    (b"Apollon Chem v6.6", b"WLZ Client v2.4.0"),
+    (b"Apollon Client v6.6", b"WLZ Client v2.4.1  "),
+    (b"Apollon Chem v6.6", b"WLZ Client v2.4.1"),
     (b"Apollon Client", b"WLZ Client    "),
     (b"Apollon Chem", b"WLZ Client  "),
 ]
