@@ -51,9 +51,21 @@ def replace_package_identity(data: bytes) -> tuple[bytes, int]:
     # Also handle the same identifier stored as UTF-16LE in resource/string pools.
     old16 = b"".join(bytes((x, 0)) for x in PACKAGE_ID_OLD)
     new16 = b"".join(bytes((x, 0)) for x in PACKAGE_ID_NEW)
-    pattern16 = rb"(?<![A-Za-z0-9_.$/]\\x00)" + re.escape(old16) + rb"(?![A-Za-z0-9_.$/]\\x00)"
-    data, n = re.subn(pattern16, new16, data)
-    total += n
+    allowed = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.$/"
+    cursor = 0
+    while True:
+        pos = data.find(old16, cursor)
+        if pos < 0:
+            break
+        end = pos + len(old16)
+        prev_is_identifier = pos >= 2 and data[pos - 1] == 0 and data[pos - 2] in allowed
+        next_is_identifier = end + 1 < len(data) and data[end + 1] == 0 and data[end] in allowed
+        if not prev_is_identifier and not next_is_identifier:
+            data = data[:pos] + new16 + data[end:]
+            total += 1
+            cursor = end
+        else:
+            cursor = pos + 1
     return data, total
 SCAN_SUFFIXES = {".dex", ".so", ".arsc", ".xml", ".json", ".txt"}
 
