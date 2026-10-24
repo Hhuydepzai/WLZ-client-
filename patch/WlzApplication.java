@@ -2,6 +2,7 @@ package com.wlz.client;
 
 import android.app.Activity;
 import android.os.Bundle;
+import android.util.Log;
 
 /**
  * Runs inside the original Apollon/Minecraft process.  Its actual superclass
@@ -40,10 +41,20 @@ public final class WlzApplication extends com.pairip.application.Application {
     @Override public void onCreate() {
         // Preserve the original PairIP startup/bootstrap flow.
         super.onCreate();
-        WlzModuleManager.initialize(this);
-        // Do not gate this on a :mc process name: the supplied V6.6 base APK
-        // launches MainActivity in the default process.
-        registerActivityLifecycleCallbacks(callbacks);
+        try {
+            WlzModuleManager.initialize(this);
+        } catch (Throwable error) {
+            // WLZ modules are optional. A settings/native initialization issue must
+            // not prevent Android from opening the launcher or the base game.
+            Log.e("WLZStartup", "Optional WLZ module initialization failed", error);
+        }
+
+        // Keep the activity hook in whichever process creates Minecraft MainActivity.
+        try {
+            registerActivityLifecycleCallbacks(callbacks);
+        } catch (Throwable error) {
+            Log.e("WLZStartup", "Could not register activity callbacks", error);
+        }
     }
 
     private static boolean isMinecraft(Activity activity) {
