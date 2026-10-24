@@ -1,8 +1,8 @@
-# WLZ Client v2.4.1 (side-by-side package variant)
+# WLZ Client v2.4.2 (side-by-side package variant)
 
 - Android 8.0+ (API 26)
 - ARM64 (arm64-v8a) devices only
-- Uses Android package ID `com.wlzclient.launcher` so it can be installed alongside the official Minecraft package; the embedded native runtime still launches the fully-qualified `com.mojang.minecraftpe.MainActivity` class.
+- Preserves Android package ID `com.mojang.minecraftpe` because the protected native/PairIP runtime may reject a renamed package. This build replaces an existing Minecraft installation rather than coexisting with it; back up worlds first.
 - Launcher, Minecraft Activity, WLZ HUD, circular ClickGUI and key mapper are packaged in one APK.
 - The runtime build must preserve the source APK's `assets/` and `resources.arsc`.
 
@@ -18,7 +18,7 @@ The build now refuses to publish that incomplete package. The GitHub Release use
 - `classes*.dex`
 - `lib/arm64-v8a/libminecraftpe.so`
 
-The embed step preserves the source APK's assets and resource table, inserts the WLZ helper DEX/native library, rewrites the Android application ID and known app-storage/provider identifiers to `com.wlzclient.launcher`, and applies the WLZ label/icon. It also patches the final binary manifest minimum SDK to API 26 (Android 8.0). CI validates the final ZIP, package ID, assets, resource table and ARM64 library before upload.
+The embed step preserves the source APK's assets and resource table, inserts the WLZ helper DEX/native library, preserves the original Android application ID and package-derived storage/provider identifiers, and applies the WLZ label/icon. It also patches the final binary manifest minimum SDK to API 26 (Android 8.0). CI validates the final ZIP, package ID, assets, resource table and ARM64 library before upload.
 
 ## Build status
 
@@ -31,10 +31,10 @@ The packager now patches the original base APK's binary manifest instead of repl
 
 The Application extension is compiled against a compile-only stub for `com.pairip.application.Application`, the PairIP bootstrap observed in the supplied Apollon runtime DEX. The stub is not packaged in the final APK. Using a superclass not present in the base DEX can crash the app as soon as Android creates the Application object.
 
-This side-by-side variant is designed not to collide with the installed official Minecraft package. A distinct package ID can still expose assumptions in a protected native runtime, so CI package/ZIP/signature validation does not replace a real device launch test. Keep the original Minecraft installation and back up worlds before testing.
+This compatibility build retains the original package ID so the protected native runtime has the expected identity. It cannot be installed alongside an existing Minecraft package; back up worlds and remove/replace the old install before testing. CI package/ZIP/signature checks still do not replace a real device launch test.
 
 
-## v2.4.1 side-by-side install changes
+## v2.4.2 side-by-side install changes
 
 - Launcher and key-mapping screens use the WLZ dark/orange visual system and a clearer, vertically scrollable layout.
 - The in-game WLZ ClickGUI opens automatically on first entry to Minecraft, with an opaque dark panel to replace the legacy purple panel visually.
