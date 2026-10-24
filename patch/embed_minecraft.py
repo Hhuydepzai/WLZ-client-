@@ -651,10 +651,11 @@ def _dex_defined_classes(data):
         strings = []
         for idx in range(string_count):
             pos = word(string_offset + 4 * idx)
-            _, pos = _read_uleb128(data, pos)
-            byte_length, pos = _read_uleb128(data, pos)
-            end = pos + byte_length
-            if end >= len(data):
+            _, pos = _read_uleb128(data, pos)  # UTF-16 code-unit count
+            # DEX string_data_item is Modified UTF-8 terminated by NUL; it
+            # does not contain a second ULEB128 byte-length field.
+            end = data.find(b"\\x00", pos)
+            if end < pos:
                 return set()
             strings.append(data[pos:end].decode("utf-8", "replace"))
         types = []
