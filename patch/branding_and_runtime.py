@@ -261,8 +261,12 @@ def patch_apk(path: Path) -> dict:
             )
             if any(token in data for token in old_brand_strings):
                 remaining.append(name)
+        # When rebasing onto the already-branded 2.4.2 APK, no stale
+        # Apollon title string may remain to replace. Treat that as a valid
+        # no-op, but still reject the build if any scanned runtime entry
+        # contains an old Apollon title.
         if brand_count == 0:
-            raise SystemExit("No Apollon Client title string was found in scanned runtime files; refusing to claim debranding succeeded.")
+            print("No stale branding matched; source appears already branded.", flush=True)
         if remaining:
             raise SystemExit("Apollon branding remains in: " + ", ".join(sorted(remaining)[:10]))
     result = {
