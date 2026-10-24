@@ -520,9 +520,10 @@ def patch_manifest(base_manifest):
     # declarations and causing install/runtime failures.
     strings, old_pool_size, flags, pool_header_size = _read_string_pool(base_manifest)
     original_package = "com.mojang.minecraftpe"
-    # A separate package lets WLZ install alongside the official Minecraft app.
-    # Keep fully-qualified runtime activity class names unchanged for native compatibility.
-    package_id = "com.wlzclient.launcher"
+    # The protected Minecraft/PairIP runtime expects its original application ID.
+    # Keep this ID for startup compatibility; this APK replaces, not coexists with,
+    # an installed Minecraft package. Back up worlds before replacing the app.
+    package_id = "com.mojang.minecraftpe"
     if len(original_package) != len(package_id):
         raise SystemExit("WLZ package ID must stay the same length for stable pool refs")
 
