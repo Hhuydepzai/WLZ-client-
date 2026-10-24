@@ -585,9 +585,10 @@ def patch_manifest(base_manifest):
     # previously integrated full APK. This lets the last verified full client
     # serve as a base when the original third-party download is unavailable.
     nodes = _xml_nodes(xml, strings)
+    app_for_cleanup = next((n for n in nodes if n["name"] == "application"), None)
     existing_wlz_ranges = []
     for node in nodes:
-        if node["name"] != "activity" or node["parent"] is not app:
+        if node["name"] != "activity" or node["parent"] is not app_for_cleanup:
             continue
         name_attr = _node_attr(xml, strings, node, "name")
         name_value = name_attr[1] if name_attr else None
