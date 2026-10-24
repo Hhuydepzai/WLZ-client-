@@ -673,7 +673,7 @@ def _dex_defined_classes(data):
         return set()
 
 
-def inject(helper, base, out):def inject(helper, base, out):
+def inject(helper, base, out):
     validate_full_runtime(base)
 
     base_entries = read_zip(base)
