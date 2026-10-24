@@ -705,6 +705,8 @@ def inject(helper, base, out):
     helper_classes = set()
     for name in helper_dex:
         helper_classes.update(_dex_defined_classes(helper_entries[name][1]))
+    if not helper_classes:
+        raise SystemExit("Could not inspect WLZ helper DEX classes; refusing an unsafe rebase.")
 
     # If the full base is a previously published WLZ client, discard only
     # standalone DEX files whose defined classes all belong to WLZ. Original
@@ -713,7 +715,10 @@ def inject(helper, base, out):
     for name in list(existing):
         if not re.fullmatch(r"classes(?:[0-9]+)?\\.dex", Path(name).name):
             continue
-        classes = _dex_defined_classes(out_entries[name][1])
+        dex_bytes = out_entries[name][1]
+        classes = _dex_defined_classes(dex_bytes)
+        if not classes and b"Lcom/wlz/client/" in dex_bytes:
+            raise SystemExit("Could not inspect stale WLZ DEX classes in " + name + "; refusing a duplicate-class APK.")
         if classes and all(cls.startswith("Lcom/wlz/client/") for cls in classes):
             del out_entries[name]
             existing.remove(name)
