@@ -148,6 +148,27 @@ jobs:
             fi
           fi
 
+          # If the original publisher URL is down, rebase the current helper
+          # onto the last full APK whose assets/resource table/signature were CI-verified.
+          # embed_minecraft.py removes only prior WLZ helper DEXes, keeps Minecraft's
+          # original DEX/native/assets, and re-adds the helper freshly built above.
+          if [ ! -s minecraft_input/base.apk ]; then
+            FALLBACK_URL="https://github.com/Hhuydepzai/WLZ-client-/releases/download/v2.4.2/WLZ-Client-2.4.2.apk"
+            echo "Trying last complete verified WLZ APK as a rebase source."
+            if curl -fL --retry 3 --retry-delay 2 --connect-timeout 15 --max-time 900 \
+                "${FALLBACK_URL}" -o /tmp/wlz-rebase-base.apk; then
+              if is_full_apk /tmp/wlz-rebase-base.apk; then
+                mv /tmp/wlz-rebase-base.apk minecraft_input/base.apk
+                echo "Using full 2.4.2 APK as a rebase source; stale WLZ DEX/manifest entries are replaced during packaging."
+              else
+                echo "::warning::Published APK fallback failed full-runtime validation."
+                rm -f /tmp/wlz-rebase-base.apk
+              fi
+            else
+              echo "::warning::Could not fetch the previously verified WLZ release; trying the original source URLs."
+            fi
+          fi
+
           if [ ! -s minecraft_input/base.apk ]; then
             # Telegram post for Apollon V6.6 / MCPE 26.51 explicitly labels this
             # short link as the 64-bit APK. Link shorteners may show an HTML interstitial

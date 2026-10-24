@@ -21,6 +21,12 @@ from pathlib import Path
 BRAND = [
     (b"Apollon Client v6.6", b"WLZ Client v2.4.3  "),
     (b"Apollon Chem v6.6", b"WLZ Client v2.4.3"),
+    (b"WLZ Client v2.4.2  ", b"WLZ Client v2.4.3  "),
+    (b"WLZ Client v2.4.2", b"WLZ Client v2.4.3"),
+    (b"WLZ Client v2.4.1  ", b"WLZ Client v2.4.3  "),
+    (b"WLZ Client v2.4.1", b"WLZ Client v2.4.3"),
+    (b"WLZ Client v2.4.0  ", b"WLZ Client v2.4.3  "),
+    (b"WLZ Client v2.4.0", b"WLZ Client v2.4.3"),
     (b"Apollon Client", b"WLZ Client    "),
     (b"Apollon Chem", b"WLZ Client  "),
 ]
@@ -29,7 +35,7 @@ BRAND = [
 PACKAGE_PATHS = []
 
 PACKAGE_ID_OLD = b"com.mojang.minecraftpe"
-PACKAGE_ID_NEW = b"com.mojang.minecraftpe"
+PACKAGE_ID_NEW = PACKAGE_ID_OLD
 if len(PACKAGE_ID_OLD) != len(PACKAGE_ID_NEW):
     raise RuntimeError("Package ID lengths must match")
 

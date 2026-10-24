@@ -581,6 +581,26 @@ def patch_manifest(base_manifest):
     _set_string_attribute(xml, app, strings, "name", app_name_idx)
     _set_string_attribute(xml, app, strings, "label", app_label_idx)
 
+    # Idempotently remove prior WLZ launcher activities when rebuilding from a
+    # previously integrated full APK. This lets the last verified full client
+    # serve as a base when the original third-party download is unavailable.
+    nodes = _xml_nodes(xml, strings)
+    app_for_cleanup = next((n for n in nodes if n["name"] == "application"), None)
+    existing_wlz_ranges = []
+    for node in nodes:
+        if node["name"] != "activity" or node["parent"] is not app_for_cleanup:
+            continue
+        name_attr = _node_attr(xml, strings, node, "name")
+        name_value = name_attr[1] if name_attr else None
+        if name_value in {
+            "com.wlz.client.MainActivity",
+            "com.wlz.client.WlzControlEditorActivity",
+        } and node["end"] is not None:
+            existing_wlz_ranges.append((node["start"], node["end"]))
+    for start, end in sorted(existing_wlz_ranges, reverse=True):
+        del xml[start:end]
+    struct.pack_into("<I", xml, 4, len(xml))
+
     # Replace the original Minecraft MAIN/LAUNCHER filter with the WLZ launcher,
     # but keep every other intent filter (deep links, file imports, etc.).
     nodes = _xml_nodes(xml, strings)
@@ -602,6 +622,8 @@ def patch_manifest(base_manifest):
         category_value = _node_attr(xml, strings, category_node, "name")[1] if category_node else None
         if action_value == "android.intent.action.MAIN" and category_value == "android.intent.category.LAUNCHER":
             delete_ranges.append((child["start"], child["end"]))
+    # A previously integrated WLZ APK has already had this original launcher
+    # filter removed, so an empty list is valid on a rebase.
     for start, end in sorted(delete_ranges, reverse=True):
         del xml[start:end]
     struct.pack_into("<I", xml, 4, len(xml))
@@ -614,6 +636,42 @@ def patch_manifest(base_manifest):
     xml[app["end_start"]:app["end_start"]] = activity_bytes
     struct.pack_into("<I", xml, 4, len(xml))
     return bytes(xml)
+
+
+def _dex_defined_classes(data):
+    """Read DEX class_defs descriptors; used to remove only the old WLZ helper DEXes."""
+    if not data.startswith(b"dex\\n") or len(data) < 112:
+        return set()
+    def word(offset):
+        return struct.unpack_from("<I", data, offset)[0]
+    try:
+        string_count, string_offset = word(56), word(60)
+        type_count, type_offset = word(64), word(68)
+        class_count, class_offset = word(96), word(100)
+        strings = []
+        for idx in range(string_count):
+            pos = word(string_offset + 4 * idx)
+            _, pos = _read_uleb128(data, pos)
+            byte_length, pos = _read_uleb128(data, pos)
+            end = pos + byte_length
+            if end >= len(data):
+                return set()
+            strings.append(data[pos:end].decode("utf-8", "replace"))
+        types = []
+        for idx in range(type_count):
+            descriptor_idx = word(type_offset + 4 * idx)
+            if descriptor_idx >= len(strings):
+                return set()
+            types.append(strings[descriptor_idx])
+        defined = set()
+        for idx in range(class_count):
+            class_idx = word(class_offset + 32 * idx)
+            if class_idx >= len(types):
+                return set()
+            defined.add(types[class_idx])
+        return defined
+    except (IndexError, struct.error, ValueError):
+        return set()
 
 
 def inject(helper, base, out):
@@ -642,12 +700,40 @@ def inject(helper, base, out):
 
     helper_dex = [
         n for n in helper_entries
-        if re.fullmatch(r"classes[0-9]*\.dex", Path(n).name)
+        if re.fullmatch(r"classes[0-9]*\\.dex", Path(n).name)
     ]
+    helper_classes = set()
+    for name in helper_dex:
+        helper_classes.update(_dex_defined_classes(helper_entries[name][1]))
+    if not helper_classes:
+        raise SystemExit("Could not inspect WLZ helper DEX classes; refusing an unsafe rebase.")
+
+    # If the full base is a previously published WLZ client, discard only
+    # standalone DEX files whose defined classes all belong to WLZ. Original
+    # Minecraft/PairIP DEX files remain byte-for-byte intact.
+    removed_wlz_dex = []
+    for name in list(existing):
+        if not re.fullmatch(r"classes(?:[0-9]+)?\\.dex", Path(name).name):
+            continue
+        dex_bytes = out_entries[name][1]
+        classes = _dex_defined_classes(dex_bytes)
+        if not classes and b"Lcom/wlz/client/" in dex_bytes:
+            raise SystemExit("Could not inspect stale WLZ DEX classes in " + name + "; refusing a duplicate-class APK.")
+        if classes and all(cls.startswith("Lcom/wlz/client/") for cls in classes):
+            del out_entries[name]
+            existing.remove(name)
+            removed_wlz_dex.append(name)
+        elif classes & helper_classes:
+            raise SystemExit(
+                "Refusing unsafe rebase: WLZ classes are mixed with non-WLZ classes in " + name
+            )
+    if removed_wlz_dex:
+        print("Removed stale WLZ helper DEX files:", sorted(removed_wlz_dex), flush=True)
+
     for name in sorted(helper_dex, key=lambda x: (0 if Path(x).name == "classes.dex" else 1, x)):
         nums = []
         for n in existing:
-            m = re.fullmatch(r"classes([0-9]*)\.dex", Path(n).name)
+            m = re.fullmatch(r"classes([0-9]*)\\.dex", Path(n).name)
             if m:
                 nums.append(1 if not m.group(1) else int(m.group(1)))
         dest = "classes.dex" if not nums else f"classes{max(nums) + 1}.dex"
@@ -655,7 +741,10 @@ def inject(helper, base, out):
         existing.add(dest)
 
     for name, entry in helper_entries.items():
-        if name.startswith("lib/arm64-v8a/") and name.endswith(".so") and name not in existing:
+        if name == "lib/arm64-v8a/libwlzruntime.so":
+            out_entries[name] = entry
+            existing.add(name)
+        elif name.startswith("lib/arm64-v8a/") and name.endswith(".so") and name not in existing:
             out_entries[name] = entry
             existing.add(name)
 
