@@ -19,25 +19,19 @@ import zlib
 from pathlib import Path
 
 BRAND = [
-    (b"Apollon Client v6.6", b"WLZ Client v2.4.1  "),
-    (b"Apollon Chem v6.6", b"WLZ Client v2.4.1"),
+    (b"Apollon Client v6.6", b"WLZ Client v2.4.2  "),
+    (b"Apollon Chem v6.6", b"WLZ Client v2.4.2"),
     (b"Apollon Client", b"WLZ Client    "),
     (b"Apollon Chem", b"WLZ Client  "),
 ]
-# The side-by-side build uses a distinct application ID and storage folder.
-# Fully-qualified Minecraft Java class names are intentionally not rewritten.
-PACKAGE_PATHS = [
-    (b"Android/data/com.mojang.minecraftpe", b"Android/data/com.wlzclient.launcher"),
-    (b"com.mojang.minecraftpe.fileprovider", b"com.wlzclient.launcher.fileprovider"),
-    (b"com.mojang.minecraftpe.firebaseinitprovider", b"com.wlzclient.launcher.firebaseinitprovider"),
-    (b"com.mojang.minecraftpe.playgamesinitprovider", b"com.wlzclient.launcher.playgamesinitprovider"),
-    (b"com.mojang.minecraftpe.androidx-startup", b"com.wlzclient.launcher.androidx-startup"),
-]
+# Preserve the source application's package and Android/data storage identity.
+# The protected runtime may reject a renamed package; side-by-side install is not supported.
+PACKAGE_PATHS = []
 
 PACKAGE_ID_OLD = b"com.mojang.minecraftpe"
-PACKAGE_ID_NEW = b"com.wlzclient.launcher"
+PACKAGE_ID_NEW = b"com.mojang.minecraftpe"
 if len(PACKAGE_ID_OLD) != len(PACKAGE_ID_NEW):
-    raise RuntimeError("Side-by-side package IDs must have equal byte length")
+    raise RuntimeError("Package ID lengths must match")
 
 
 def replace_package_identity(data: bytes) -> tuple[bytes, int]:
@@ -270,7 +264,7 @@ def patch_apk(path: Path) -> dict:
         "title_replacements": brand_count,
         "package_path_replacements": path_count,
         "package_identity_replacements": package_count,
-        "application_id": "com.wlzclient.launcher",
+        "application_id": "com.mojang.minecraftpe",
         "launcher_icons_replaced": icon_count,
         "modified_entries": changed,
         "zip_integrity": "OK",
