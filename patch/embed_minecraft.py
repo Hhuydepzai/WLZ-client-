@@ -640,7 +640,7 @@ def patch_manifest(base_manifest):
 
 def _dex_defined_classes(data):
     """Read DEX class_defs descriptors; used to remove only the old WLZ helper DEXes."""
-    if not data.startswith(b"dex\\n") or len(data) < 112:
+    if not data.startswith(b"dex\n") or len(data) < 112:
         return set()
     def word(offset):
         return struct.unpack_from("<I", data, offset)[0]
@@ -700,7 +700,7 @@ def inject(helper, base, out):
 
     helper_dex = [
         n for n in helper_entries
-        if re.fullmatch(r"classes[0-9]*\\.dex", Path(n).name)
+        if re.fullmatch(r"classes[0-9]*\.dex", Path(n).name)
     ]
     helper_classes = set()
     for name in helper_dex:
@@ -713,7 +713,7 @@ def inject(helper, base, out):
     # Minecraft/PairIP DEX files remain byte-for-byte intact.
     removed_wlz_dex = []
     for name in list(existing):
-        if not re.fullmatch(r"classes(?:[0-9]+)?\\.dex", Path(name).name):
+        if not re.fullmatch(r"classes(?:[0-9]+)?\.dex", Path(name).name):
             continue
         dex_bytes = out_entries[name][1]
         classes = _dex_defined_classes(dex_bytes)
@@ -733,7 +733,7 @@ def inject(helper, base, out):
     for name in sorted(helper_dex, key=lambda x: (0 if Path(x).name == "classes.dex" else 1, x)):
         nums = []
         for n in existing:
-            m = re.fullmatch(r"classes([0-9]*)\\.dex", Path(n).name)
+            m = re.fullmatch(r"classes([0-9]*)\.dex", Path(n).name)
             if m:
                 nums.append(1 if not m.group(1) else int(m.group(1)))
         dest = "classes.dex" if not nums else f"classes{max(nums) + 1}.dex"
