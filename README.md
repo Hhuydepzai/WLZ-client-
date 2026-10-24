@@ -1,4 +1,4 @@
-# WLZ Client v2.4.2 (side-by-side package variant)
+# WLZ Client v2.4.3 (side-by-side package variant)
 
 - Android 8.0+ (API 26)
 - ARM64 (arm64-v8a) devices only
@@ -34,10 +34,17 @@ The Application extension is compiled against a compile-only stub for `com.pairi
 This compatibility build retains the original package ID so the protected native runtime has the expected identity. It cannot be installed alongside an existing Minecraft package; back up worlds and remove/replace the old install before testing. CI package/ZIP/signature checks still do not replace a real device launch test.
 
 
-## v2.4.2 side-by-side install changes
+## v2.4.3 side-by-side install changes
 
 - Launcher and key-mapping screens use the WLZ dark/orange visual system and a clearer, vertically scrollable layout.
 - The in-game WLZ ClickGUI opens automatically on first entry to Minecraft, with an opaque dark panel to replace the legacy purple panel visually.
 - The overlay makes a single best-effort tap at the old panel's top-right close control before showing the WLZ GUI. This targets the legacy native overlay; it still requires device verification because the old panel is drawn by the embedded runtime, not fully represented in Android's View hierarchy.
 - The WLZ floating control uses a dark background and orange crown/wordmark instead of a white circle.
 - The build still preserves the full base assets/, resources.arsc, Minecraft native library, and original Minecraft bootstrap classes. No claim is made that every module works until it is tested on the target device.
+
+
+## v2.4.3 startup recovery
+
+- The launcher wraps optional UI construction in a safe fallback screen that records the failing Java exception in Logcat instead of leaving an unresponsive blank screen.
+- WLZ module setup and activity callback registration are guarded; the original PairIP superclass startup remains intact.
+- Build and APK structure/signature checks are automated. A real Android device launch and Minecraft gameplay test is still required before claiming all runtime issues are fixed.
