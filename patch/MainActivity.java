@@ -14,6 +14,7 @@ import android.provider.OpenableColumns;
 import android.view.Gravity;
 import android.view.View;
 import android.view.Window;
+import android.util.Log;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -40,6 +41,15 @@ public final class MainActivity extends Activity {
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        try {
+            createMainScreen(state);
+        } catch (Throwable error) {
+            Log.e("WLZStartup", "Main launcher UI failed; showing safe screen", error);
+            showSafeMode(error);
+        }
+    }
+
+    private void createMainScreen(Bundle state) {
         Window window = getWindow();
         window.setStatusBarColor(BG);
         window.setNavigationBarColor(BG);
@@ -102,6 +112,50 @@ public final class MainActivity extends Activity {
         refreshRuntime();
     }
 
+    private void showSafeMode(Throwable error) {
+        try {
+            Window window = getWindow();
+            window.setStatusBarColor(BG);
+            window.setNavigationBarColor(BG);
+
+            FrameLayout root = new FrameLayout(this);
+            root.setBackgroundColor(BG);
+            LinearLayout panel = new LinearLayout(this);
+            panel.setOrientation(LinearLayout.VERTICAL);
+            panel.setGravity(Gravity.CENTER_HORIZONTAL);
+            panel.setPadding(dp(24), dp(24), dp(24), dp(24));
+
+            TextView brand = text("WLZ CLIENT", 25, ORANGE, true);
+            brand.setGravity(Gravity.CENTER);
+            panel.addView(brand, top(0, -2));
+
+            TextView status = text("SAFE START", 11, TEXT, true);
+            status.setGravity(Gravity.CENTER);
+            panel.addView(status, top(10, -2));
+
+            String detail = error == null ? "Launcher UI could not be loaded."
+                    : error.getClass().getSimpleName() + ": " + String.valueOf(error.getMessage());
+            if (detail.length() > 180) detail = detail.substring(0, 177) + "...";
+            TextView reason = text(detail, 10, MUTED, false);
+            reason.setGravity(Gravity.CENTER);
+            reason.setMaxLines(5);
+            panel.addView(reason, top(10, -2));
+
+            Button play = button("THỬ MỞ MINECRAFT");
+            play.setTextColor(Color.WHITE);
+            play.setBackground(round(ORANGE, ORANGE, 1, 14));
+            play.setOnClickListener(v -> launchMinecraft());
+            panel.addView(play, top(18, dp(50)));
+
+            FrameLayout.LayoutParams params =
+                    new FrameLayout.LayoutParams(-1, -2, Gravity.CENTER);
+            root.addView(panel, params);
+            setContentView(root);
+        } catch (Throwable fallbackError) {
+            Log.e("WLZStartup", "Safe launcher screen also failed", fallbackError);
+        }
+    }
+
     private View buildHeader() {
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -115,7 +169,7 @@ public final class MainActivity extends Activity {
         labels.addView(text("MINECRAFT BEDROCK", 9, MUTED, true), top(2, -2));
         row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView version = text("V2.4.2", 9, ORANGE, true);
+        TextView version = text("V2.4.3", 9, ORANGE, true);
         version.setGravity(Gravity.CENTER);
         version.setPadding(dp(11), dp(7), dp(11), dp(7));
         version.setBackground(round(PANEL_2, STROKE, 1, 20));
@@ -318,7 +372,7 @@ public final class MainActivity extends Activity {
             intent.addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
             startActivity(intent);
         } catch (Throwable error) {
-            runtimeStatus.setText("KHÔNG MỞ ĐƯỢC MINECRAFT");
+            if (runtimeStatus != null) runtimeStatus.setText("KHÔNG MỞ ĐƯỢC MINECRAFT");
             Toast.makeText(this,
                     "Không mở được Minecraft. Hãy kiểm tra log crash; WLZ không tự đóng app.",
                     Toast.LENGTH_LONG).show();
