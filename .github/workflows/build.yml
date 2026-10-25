@@ -6,8 +6,9 @@ concurrency:
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -35,6 +36,7 @@ jobs:
 
       - name: Extract project
         run: |
+          set -euo pipefail
           unzip -q app.zip
           unzip -q tools.zip
 
@@ -43,6 +45,10 @@ jobs:
           set -euo pipefail
           python3 -m py_compile patch/apply.py patch/embed_minecraft.py patch/branding_and_runtime.py
           python3 patch/apply.py
+          ! grep -q 'com.pairip.application.Application' app/src/main/java/com/wlz/client/WlzApplication.java
+          ! grep -q 'com.mojang.minecraftpe.MainActivity' app/src/main/AndroidManifest.xml
+          grep -q 'com.mojang.minecraftpe' app/src/main/AndroidManifest.xml
+          grep -q '<queries>' app/src/main/AndroidManifest.xml
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -58,7 +64,6 @@ jobs:
           BT="$(ls -1 "${ANDROID_HOME}/build-tools" | sort -V | tail -n 1)"
           AAPT2="${ANDROID_HOME}/build-tools/${BT}/aapt2"
           APKSIGNER="${ANDROID_HOME}/build-tools/${BT}/apksigner"
-          ZIPALIGN="${ANDROID_HOME}/build-tools/${BT}/zipalign"
 
           "${APKSIGNER}" verify --verbose "$APK"
           BADGING="$("${AAPT2}" dump badging "$APK")"
@@ -69,7 +74,7 @@ jobs:
           grep -q 'com.mojang.minecraftpe.preview' manifest-tree.txt
           grep -q 'com.wlz.client.MainActivity' manifest-tree.txt
           if grep -q 'com.mojang.minecraftpe.MainActivity' manifest-tree.txt; then
-            echo "Standalone launcher must not declare an embedded Minecraft Activity."
+            echo "WLZ launcher must not bundle/declare an in-process Minecraft Activity."
             exit 1
           fi
           unzip -tq "$APK"
@@ -78,7 +83,7 @@ jobs:
           cp "$APK" dist/WLZ-Launcher-2.5.0.apk
           unzip -tq dist/WLZ-Launcher-2.5.0.apk
           sha256sum dist/WLZ-Launcher-2.5.0.apk | tee dist/SHA256SUMS.txt
-          echo "Built standalone launcher; no Minecraft base APK is embedded."
+          echo "Built standalone launcher; Minecraft is opened from the user's existing installation."
 
       - name: Upload installable launcher
         uses: actions/upload-artifact@v4
@@ -88,6 +93,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish direct APK download
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -99,5 +105,5 @@ jobs:
           else
             gh release create "$TAG" dist/WLZ-Launcher-2.5.0.apk \
               --title "WLZ Launcher 2.5.0" \
-              --notes "Standalone WLZ launcher. Opens an existing Minecraft Bedrock installation; it does not bundle Minecraft. The external-app sandbox means in-process HUD/native modules are not injected into another app."
+              --notes "Standalone WLZ launcher. Opens an existing Minecraft Bedrock installation; it does not bundle Minecraft. Android app isolation means the launcher cannot inject its native HUD/modules into another app."
           fi
