@@ -3,7 +3,6 @@ import shutil
 
 APP = Path("app")
 JAVA = APP / "src/main/java/com/wlz/client"
-CPP = APP / "src/main/cpp"
 RES = APP / "src/main/res/drawable"
 VALUES = APP / "src/main/res/values"
 
@@ -34,8 +33,6 @@ for name in [
 ]:
     copy(name, JAVA / name)
 
-copy("wlzclient.cpp", CPP / "wlzclient.cpp")
-copy("CMakeLists.txt", CPP / "CMakeLists.txt")
 copy("AndroidManifest.xml", APP / "src/main/AndroidManifest.xml")
 copy("styles.xml", VALUES / "styles.xml")
 copy("wlz_icon.xml", RES / "wlz_icon.xml")
