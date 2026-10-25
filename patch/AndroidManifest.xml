@@ -4,6 +4,12 @@
     <queries>
         <package android:name="com.mojang.minecraftpe" />
         <package android:name="com.mojang.minecraftpe.preview" />
+        <!-- Some sideloaded Bedrock builds use a different package ID.
+             Query launcher activities and identify Minecraft by its app label. -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
     </queries>
 
     <uses-permission android:name="android.permission.INTERNET" />
