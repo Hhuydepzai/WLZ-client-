@@ -321,26 +321,6 @@ public final class MainActivity extends Activity {
         return null;
     }
 
-        if (!hasMinecraftRuntime()) {
-            refreshRuntime();
-            Toast.makeText(this,
-                    "Minecraft runtime không có trong APK này. Không thể mở game.",
-                    Toast.LENGTH_LONG).show();
-            return;
-        }
-        try {
-            Intent intent = new Intent();
-            intent.setComponent(new ComponentName(getPackageName(), MC_ACTIVITY));
-            intent.addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
-            startActivity(intent);
-        } catch (Throwable error) {
-            if (runtimeStatus != null) runtimeStatus.setText("KHÔNG MỞ ĐƯỢC MINECRAFT");
-            Toast.makeText(this,
-                    "Không mở được Minecraft. Hãy kiểm tra log crash; WLZ không tự đóng app.",
-                    Toast.LENGTH_LONG).show();
-        }
-    }
-
     private void openKeyMapper() {
         try {
             startActivity(new Intent(this, WlzControlEditorActivity.class));
