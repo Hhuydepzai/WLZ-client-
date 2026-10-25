@@ -340,12 +340,14 @@ public final class MainActivity extends Activity {
 
     private void refreshRuntime() {
         boolean ready = hasMinecraftRuntime();
-        runtimeStatus.setText(ready
-                ? "●  MINECRAFT ĐÃ CÀI • SẴN SÀNG MỞ"
-                : "●  CHƯA TÌM THẤY MINECRAFT BEDROCK");
-        runtimeStatus.setTextColor(ready
-                ? Color.rgb(106, 208, 138)
-                : Color.rgb(255, 153, 102));
+        if (runtimeStatus != null) {
+            runtimeStatus.setText(ready
+                    ? "●  MINECRAFT ĐÃ CÀI • SẴN SÀNG MỞ"
+                    : "●  CHƯA TÌM THẤY MINECRAFT BEDROCK");
+            runtimeStatus.setTextColor(ready
+                    ? Color.rgb(106, 208, 138)
+                    : Color.rgb(255, 153, 102));
+        }
         if (playButton != null) {
             playButton.setEnabled(true);
             playButton.setAlpha(1.0f);
