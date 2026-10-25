@@ -1,7 +1,5 @@
 from pathlib import Path
-import os
 import shutil
-import subprocess
 
 APP = Path("app")
 JAVA = APP / "src/main/java/com/wlz/client"
@@ -9,49 +7,19 @@ CPP = APP / "src/main/cpp"
 RES = APP / "src/main/res/drawable"
 VALUES = APP / "src/main/res/values"
 
+
 def copy(name: str, dest: Path):
-    src = Path("patch") / name
+    source = Path("patch") / name
+    if not source.is_file():
+        raise SystemExit("Required launcher source is missing: " + str(source))
     dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(src, dest)
+    shutil.copyfile(source, dest)
 
-def prepare_minecraft_application_stub():
-    # Compile-only shim for the real PairIP superclass in the source Minecraft DEX.
-    # This class is excluded from the helper APK by compileOnly; the final
-    # combined APK resolves the superclass from the original base DEX.
-    stub_root = APP / ".minecraft_application_stub"
-    stub_dir = stub_root / "com/pairip/application"
-    stub_dir.mkdir(parents=True, exist_ok=True)
-    java_file = stub_dir / "Application.java"
-    java_file.write_text(
-        "package com.pairip.application;\n"
-        "public class Application extends android.app.Application {}\n",
-        encoding="utf-8",
-    )
-
-    sdk_home = Path(os.environ.get("ANDROID_HOME", ""))
-    candidates = [sdk_home / "platforms" / "android-35" / "android.jar"]
-    platforms = sdk_home / "platforms"
-    if platforms.exists():
-        candidates.extend(sorted(platforms.glob("android-*/android.jar")))
-    sdk = next((p for p in reversed(candidates) if p.exists()), None)
-    if sdk is None:
-        raise SystemExit("Android SDK android.jar not found for compile stubs")
-
-    classes = stub_root / "classes"
-    classes.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        ["javac", "-source", "8", "-target", "8", "-cp", str(sdk),
-         "-d", str(classes), str(java_file)],
-        check=True,
-    )
-    jar = APP / "minecraft-application-stub.jar"
-    jar.unlink(missing_ok=True)
-    subprocess.run(["jar", "cf", str(jar), "-C", str(classes), "."], check=True)
-    shutil.rmtree(stub_root, ignore_errors=True)
 
 copy("build.gradle", APP / "build.gradle")
-prepare_minecraft_application_stub()
 
+# This is a standalone launcher now: it must not depend on Apollon's PairIP
+# Application class or require an embedded Minecraft APK to compile.
 for name in [
     "MainActivity.java",
     "WlzApplication.java",
@@ -73,11 +41,11 @@ copy("styles.xml", VALUES / "styles.xml")
 copy("wlz_icon.xml", RES / "wlz_icon.xml")
 copy("wlz_splash.xml", RES / "wlz_splash.xml")
 
-# If pack payloads are present in the source tree, bundle them into the helper APK.
-# The embed step also copies these namespaced assets into the final Minecraft APK.
+# Optional launcher logo and packaged fix-lag data. Missing assets must not
+# break launcher startup; WlzLogoView draws a safe vector-like fallback.
 source_assets = Path("patch/assets")
 target_assets = APP / "src/main/assets"
-for rel in [
+for relative in [
     Path("wlz_logo.png"),
     Path("wlz_app_icon.png"),
     Path("wlz_packs/common_a.mcpack"),
@@ -85,10 +53,10 @@ for rel in [
     Path("wlz_packs/fixlag2.mcpack"),
     Path("wlz_packs/fixlag3.mcpack"),
 ]:
-    source = source_assets / rel
+    source = source_assets / relative
     if source.is_file():
-        target = target_assets / rel
+        target = target_assets / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, target)
 
-print("WLZ single-app patch applied")
+print("WLZ standalone launcher patch applied")
