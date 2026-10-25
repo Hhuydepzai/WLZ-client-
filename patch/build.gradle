@@ -40,9 +40,4 @@ android {
         resources { excludes += ['/META-INF/{AL2.0,LGPL2.1}'] }
     }
 
-    dependencies {
-        // Compile-only stub for the original PairIP Application superclass.
-        // The real class comes from the original Apollon base DEX.
-        compileOnly files('minecraft-application-stub.jar')
-    }
 }
