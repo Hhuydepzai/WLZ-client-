@@ -49,6 +49,7 @@ jobs:
           ! grep -q 'com.mojang.minecraftpe.MainActivity' app/src/main/AndroidManifest.xml
           grep -q 'com.mojang.minecraftpe' app/src/main/AndroidManifest.xml
           grep -q '<queries>' app/src/main/AndroidManifest.xml
+          grep -q 'android.permission.QUERY_ALL_PACKAGES' app/src/main/AndroidManifest.xml
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -72,6 +73,7 @@ jobs:
           "${AAPT2}" dump xmltree "$APK" --file AndroidManifest.xml > manifest-tree.txt
           grep -q 'com.mojang.minecraftpe' manifest-tree.txt
           grep -q 'com.mojang.minecraftpe.preview' manifest-tree.txt
+          grep -q 'android.permission.QUERY_ALL_PACKAGES' manifest-tree.txt
           grep -q 'com.wlz.client.MainActivity' manifest-tree.txt
           if grep -q 'com.mojang.minecraftpe.MainActivity' manifest-tree.txt; then
             echo "WLZ launcher must not bundle/declare an in-process Minecraft Activity."
@@ -80,16 +82,16 @@ jobs:
           unzip -tq "$APK"
 
           mkdir -p dist
-          cp "$APK" dist/WLZ-Launcher-2.5.2.apk
-          unzip -tq dist/WLZ-Launcher-2.5.2.apk
-          sha256sum dist/WLZ-Launcher-2.5.2.apk | tee dist/SHA256SUMS.txt
+          cp "$APK" dist/WLZ-Launcher-2.5.3.apk
+          unzip -tq dist/WLZ-Launcher-2.5.3.apk
+          sha256sum dist/WLZ-Launcher-2.5.3.apk | tee dist/SHA256SUMS.txt
           echo "Built standalone launcher; Minecraft is opened from the user's existing installation."
 
       - name: Upload installable launcher
         uses: actions/upload-artifact@v4
         with:
-          name: WLZ-Launcher-2.5.2-APK
-          path: dist/WLZ-Launcher-2.5.2.apk
+          name: WLZ-Launcher-2.5.3-APK
+          path: dist/WLZ-Launcher-2.5.3.apk
           if-no-files-found: error
 
       - name: Publish direct APK download
@@ -99,11 +101,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TAG="v2.5.2-launcher"
+          TAG="v2.5.3-launcher"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/WLZ-Launcher-2.5.2.apk --clobber
+            gh release upload "$TAG" dist/WLZ-Launcher-2.5.3.apk --clobber
           else
-            gh release create "$TAG" dist/WLZ-Launcher-2.5.2.apk \
-              --title "WLZ Launcher 2.5.2" \
+            gh release create "$TAG" dist/WLZ-Launcher-2.5.3.apk \
+              --title "WLZ Launcher 2.5.3" \
               --notes "Standalone WLZ launcher. Opens an existing Minecraft Bedrock installation; it does not bundle Minecraft. Android app isolation means the launcher cannot inject its native HUD/modules into another app."
           fi
