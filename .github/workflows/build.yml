@@ -1,29 +1,27 @@
-name: Build WLZ Client
+name: Build WLZ Standalone Launcher
 
 concurrency:
-  group: wlz-build
+  group: wlz-launcher-build
   cancel-in-progress: true
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           lfs: true
-
-      - name: Validate build scripts
-        run: python3 -m py_compile patch/apply.py patch/embed_minecraft.py
 
       - name: Setup Java
         uses: actions/setup-java@v5
@@ -31,489 +29,81 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools build-tools;35.0.0 platforms;android-35'
+
       - name: Extract project
         run: |
+          set -euo pipefail
           unzip -q app.zip
           unzip -q tools.zip
 
-      - name: Apply WLZ patch
-        run: python3 patch/apply.py
-
-      - name: Remove obsolete Snaplook references
-        shell: bash
+      - name: Apply standalone launcher patch
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path("app/src/main/cpp/wlzclient.cpp")
-          s = p.read_text()
-          s = s.replace("void doSnapNow() {\n    if (g_modules[7].load() && g_lastPlayer) {\n        snapPlayer(g_lastPlayer);\n        g_snapPending.store(false);\n    }\n}\n\n", "")
-          s = s.replace("    applyFullbright();\n    doSnapNow();\n}", "    applyFullbright();\n}")
-          s = s.replace("    if (index==7 && on) {\n        g_snapPending.store(true);\n        doSnapNow();\n    }\n    if (index==4) applyFullbright();", "    // Snaplook index 7 is not part of the current Apollon port.\n    if (index==4) applyFullbright();")
-          p.write_text(s)
-          PY
+          python3 -m py_compile patch/apply.py patch/embed_minecraft.py patch/branding_and_runtime.py
+          python3 patch/apply.py
+          ! grep -q 'com.pairip.application.Application' app/src/main/java/com/wlz/client/WlzApplication.java
+          ! grep -q 'com.mojang.minecraftpe.MainActivity' app/src/main/AndroidManifest.xml
+          grep -q 'com.mojang.minecraftpe' app/src/main/AndroidManifest.xml
+          grep -q '<queries>' app/src/main/AndroidManifest.xml
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
 
-      - name: Build WLZ helper
+      - name: Build standalone WLZ launcher
         run: |
+          set -euo pipefail
           gradle assembleDebug --stacktrace
-          test -s app/build/outputs/apk/debug/app-debug.apk
-
-      - name: Upload WLZ helper APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: WLZ-Helper-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-
-      - name: Build from current compatibility sources
-        id: source_mode
-        shell: bash
-        run: echo "reuse=false" >> "$GITHUB_OUTPUT"
-
-      - name: Reuse previously verified APK for direct publishing
-        if: steps.source_mode.outputs.reuse == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          name: WLZ-Client-2.4.3-APK
-          run-id: 38118766959
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          path: dist/reused
-
-      - name: Validate reused APK
-        if: steps.source_mode.outputs.reuse == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          APK="dist/reused/WLZ-Client-2.4.3.apk"
+          APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
-          unzip -tq "$APK"
-          unzip -Z1 "$APK" | grep -q '^assets/'
-          unzip -Z1 "$APK" | grep -qx 'resources.arsc'
-          unzip -Z1 "$APK" | grep -qx 'lib/arm64-v8a/libminecraftpe.so'
-          mkdir -p dist
-          cp "$APK" dist/WLZ-Client-2.4.3.apk
-          sha256sum dist/WLZ-Client-2.4.3.apk | tee dist/SHA256SUMS.txt
-          echo "Reused previously signature-verified full client APK for a direct single-file release."
-
-      - name: Download complete Minecraft base APK
-        if: steps.source_mode.outputs.reuse != 'true'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          mkdir -p minecraft_input
-          release_id="405413956"
-
-          # Prefer a complete source APK already attached to the repository release.
-          gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets?per_page=100" \
-            --paginate --jq '.[] | [.name, .url] | @tsv' > /tmp/wlz-release-assets.tsv
-          BASE_LINE="$(awk -F '\t' '$1 == "base.apk" || $1 == "Minecraft-base.apk" || $1 == "Minecraft.apk" || $1 == "minecraft-full.apk" || $1 ~ /^Apollon.*\.apk$/ {print; exit}' /tmp/wlz-release-assets.tsv)"
-
-          is_full_apk() {
-            python3 - "$1" <<'PY'
-          import re, sys, zipfile
-          try:
-              with zipfile.ZipFile(sys.argv[1]) as z:
-                  names = set(z.namelist())
-              required = ["AndroidManifest.xml", "resources.arsc", "lib/arm64-v8a/libminecraftpe.so"]
-              missing = [n for n in required if n not in names]
-              if not any(n.startswith("assets/") for n in names): missing.append("assets/*")
-              if not any(re.fullmatch(r"classes[0-9]*\.dex", n) for n in names): missing.append("classes*.dex")
-              if missing: sys.exit(1)
-          except Exception:
-              sys.exit(1)
-          PY
-          }
-
-          if [ -n "${BASE_LINE}" ]; then
-            IFS=$'\t' read -r name api_url <<< "${BASE_LINE}"
-            echo "Trying complete base asset from release: ${name}"
-            curl -fL --retry 4 --retry-delay 2 \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
-              -H "Accept: application/octet-stream" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "${api_url}" -o /tmp/wlz-candidate.apk
-            if is_full_apk /tmp/wlz-candidate.apk; then
-              mv /tmp/wlz-candidate.apk minecraft_input/base.apk
-            else
-              echo "::warning::Release asset ${name} isn't a complete APK; trying the published source URL."
-              rm -f /tmp/wlz-candidate.apk
-            fi
-          fi
-
-          # If the original publisher URL is down, rebase the current helper
-          # onto the last full APK whose assets/resource table/signature were CI-verified.
-          # embed_minecraft.py removes only prior WLZ helper DEXes, keeps Minecraft's
-          # original DEX/native/assets, and re-adds the helper freshly built above.
-          if [ ! -s minecraft_input/base.apk ]; then
-            FALLBACK_URL="https://github.com/Hhuydepzai/WLZ-client-/releases/download/v2.4.2/WLZ-Client-2.4.2.apk"
-            echo "Trying last complete verified WLZ APK as a rebase source."
-            if curl -fL --retry 3 --retry-delay 2 --connect-timeout 15 --max-time 900 \
-                "${FALLBACK_URL}" -o /tmp/wlz-rebase-base.apk; then
-              if is_full_apk /tmp/wlz-rebase-base.apk; then
-                mv /tmp/wlz-rebase-base.apk minecraft_input/base.apk
-                echo "Using full 2.4.2 APK as a rebase source; stale WLZ DEX/manifest entries are replaced during packaging."
-              else
-                echo "::warning::Published APK fallback failed full-runtime validation."
-                rm -f /tmp/wlz-rebase-base.apk
-              fi
-            else
-              echo "::warning::Could not fetch the previously verified WLZ release; trying the original source URLs."
-            fi
-          fi
-
-          if [ ! -s minecraft_input/base.apk ]; then
-            # Telegram post for Apollon V6.6 / MCPE 26.51 explicitly labels this
-            # short link as the 64-bit APK. Link shorteners may show an HTML interstitial
-            # to curl, so resolve href/meta/script URLs in a bounded, validated loop.
-            SOURCE_URL="${APOLLON_V66_ARM64_URL:-https://go.linkify.ru/2Jri}"
-            # Try the original v6.6 short link and both published CDN hosts
-            # for the matching MCPE 26.51 64-bit download.
-            printf '%s\n' "${SOURCE_URL}" \
-              "https://dl6.cdn9mc.com/dl2.php?file=Apollon-Client-MCPE-26.51-64bit.apk" \
-              "https://files2.cdn9mc.com/dl2.php?file=Apollon-Client-MCPE-26.51-64bit.apk" \
-              > /tmp/wlz-candidates.txt
-            found=0
-            # Bound direct resolution. Some shorteners expose many ad/font
-            # assets; a dead resource must not stall an APK build for 30 minutes.
-            direct_deadline=$((SECONDS + 150))
-            for depth in 1 2 3 4; do
-              [ -s /tmp/wlz-candidates.txt ] || break
-              [ "$SECONDS" -lt "$direct_deadline" ] || { echo "Direct resolver deadline reached; switching to browser fallback."; break; }
-              : > /tmp/wlz-next-candidates.txt
-              while IFS= read -r candidate_url; do
-                [ -n "${candidate_url}" ] || continue
-                [ "$SECONDS" -lt "$direct_deadline" ] || break
-                echo "Resolving download source (hop ${depth}): ${candidate_url}"
-                if ! curl -fL --retry 1 --retry-delay 1 \
-                    --connect-timeout 10 --max-time 30 \
-                    --user-agent "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128 Safari/537.36" \
-                    -e "https://t.me/" \
-                    "${candidate_url}" -o /tmp/wlz-candidate.bin; then
-                  continue
-                fi
-
-                if is_full_apk /tmp/wlz-candidate.bin; then
-                  mv /tmp/wlz-candidate.bin minecraft_input/base.apk
-                  found=1
-                  break
-                fi
-
-                # Parse the interstitial (only bounded http(s) links, relative
-                # links are resolved against the current URL; reject known ad hosts).
-                python3 - /tmp/wlz-candidate.bin "${candidate_url}" >> /tmp/wlz-next-candidates.txt <<'PY'
-          from html.parser import HTMLParser
-          from urllib.parse import urljoin, urlparse, parse_qs, unquote
-          import re, sys
-          path, base = sys.argv[1], sys.argv[2]
-          try:
-              data = open(path, "rb").read(2_000_000).decode("utf-8", "ignore")
-          except Exception:
-              data = ""
-          found = []
-          class P(HTMLParser):
-              def handle_starttag(self, tag, attrs):
-                  a = dict(attrs)
-                  for key in ("href", "src", "content", "data-url", "data-href"):
-                      value = a.get(key, "")
-                      if not value: continue
-                      m = re.search(r"url\s*=\s*([^;]+)", value, re.I)
-                      if m: value = m.group(1).strip(" '\"")
-                      for candidate in [value, unquote(value)]:
-                          try:
-                              u = urljoin(base, candidate)
-                              parsed = urlparse(u)
-                              if parsed.scheme in ("http", "https"): found.append(u)
-                          except ValueError:
-                              continue
-          P().feed(data)
-          # Some shortener pages contain malformed pseudo-URLs (for example
-          # bracketed hosts or SVG namespaces); ignore those instead of aborting.
-          for match in re.findall(r"""(?:https?:)?//[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+""", data):
-              try:
-                  found.append(urljoin(base, match))
-              except ValueError:
-                  continue
-          for match in re.findall(r"""(?:location\.href|window\.location|document\.location)\s*=\s*['"]([^'"]+)""", data, re.I):
-              try:
-                  found.append(urljoin(base, match))
-              except ValueError:
-                  continue
-          blocked = (
-              "doubleclick.net", "googlesyndication.com", "adf.ly",
-              "linkvertise.com", "w3.org", "cloudfront.net", "ggclicker.com",
-              "fonts.gstatic.com", "fonts.googleapis.com", "gstatic.com",
-              "googletagmanager.com", "google-analytics.com", "jsdelivr.com",
-              "yandex.ru", "yastatic.net", "surunzi.com", "ko-fi.com",
-              "spadsync.com", "paypal.com", "paypalobjects.com"
-          )
-          def priority(u):
-              parsed = urlparse(u)
-              host = parsed.netloc.lower()
-              text = (host + parsed.path + "?" + parsed.query).lower()
-              if any(bad in host for bad in blocked): return -1
-              if parsed.scheme not in ("http", "https") or not parsed.netloc: return -1
-              if parsed.path.lower().endswith((".js", ".css", ".woff", ".woff2", ".ttf", ".svg", ".png", ".jpg", ".jpeg", ".ico", ".webp", ".gif")): return -1
-              score = 0
-              if "cdn9mc.com" in host: score += 100
-              if "dl2.php" in parsed.path.lower(): score += 80
-              if "download" in text or "apk" in text or "file=" in text: score += 45
-              if "linkify.ru" in host: score += 15
-              if "download" in parsed.path.lower(): score += 20
-              return score
-          unique = list(dict.fromkeys(u.strip(" \t\r\n'\"<>),;") for u in found))
-          clean = sorted((u for u in unique if priority(u) > 0), key=priority, reverse=True)[:12]
-          print("\n".join(clean))
-          PY
-                rm -f /tmp/wlz-candidate.bin
-              done < /tmp/wlz-candidates.txt
-              [ "${found}" -eq 0 ] || break
-              sort -u /tmp/wlz-next-candidates.txt > /tmp/wlz-candidates.txt
-            done
-            if [ "${found}" -ne 1 ]; then
-              echo "::warning::Direct HTTP resolution failed; trying a browser session for the download button."
-              python3 -m venv /tmp/wlz-browser-venv
-              /tmp/wlz-browser-venv/bin/pip install --disable-pip-version-check -q playwright
-              /tmp/wlz-browser-venv/bin/python -m playwright install --with-deps chromium
-              /tmp/wlz-browser-venv/bin/python - <<'PY'
-          import asyncio, os, re, shutil, sys, zipfile
-          from pathlib import Path
-          from urllib.parse import urlparse
-          from playwright.async_api import async_playwright
-
-          OUT = Path("minecraft_input/base.apk")
-          TEMP = Path("/tmp/wlz-browser-download.bin")
-          SOURCES = [
-              os.environ.get("APOLLON_V66_ARM64_URL", "https://go.linkify.ru/2Jri"),
-              "https://dl6.cdn9mc.com/dl2.php?file=Apollon-Client-MCPE-26.51-64bit.apk",
-              "https://files2.cdn9mc.com/dl2.php?file=Apollon-Client-MCPE-26.51-64bit.apk",
-          ]
-          def is_full_apk(path):
-              try:
-                  with zipfile.ZipFile(path) as z:
-                      names = set(z.namelist())
-                  required = ["AndroidManifest.xml", "resources.arsc", "lib/arm64-v8a/libminecraftpe.so"]
-                  return (all(x in names for x in required)
-                          and any(n.startswith("assets/") for n in names)
-                          and any(re.fullmatch(r"classes[0-9]*\.dex", n) for n in names))
-              except Exception:
-                  return False
-
-          async def main():
-              started = asyncio.get_running_loop().time()
-              found = asyncio.Event()
-              pages = []
-              # Keep every Playwright download save task alive until it completes.
-              # Closing Chromium while save_as is pending causes TargetClosedError.
-              download_tasks = set()
-              async with async_playwright() as p:
-                  browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
-                  context = await browser.new_context(
-                      accept_downloads=True,
-                      user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36",
-                      viewport={"width": 1365, "height": 900},
-                  )
-                  async def on_download(download):
-                      try:
-                          await download.save_as(str(TEMP))
-                          if is_full_apk(TEMP):
-                              shutil.copyfile(TEMP, OUT)
-                              print("Browser obtained and validated full APK:", download.suggested_filename, OUT.stat().st_size, flush=True)
-                              found.set()
-                          else:
-                              print("Ignoring non-APK download:", download.suggested_filename, TEMP.stat().st_size if TEMP.exists() else 0, flush=True)
-                              TEMP.unlink(missing_ok=True)
-                      except Exception as exc:
-                          print("Download candidate rejected:", repr(exc), flush=True)
-                  def bind(page):
-                      pages.append(page)
-                      def schedule_download(download):
-                          task = asyncio.create_task(on_download(download))
-                          download_tasks.add(task)
-                          task.add_done_callback(download_tasks.discard)
-                      page.on("download", schedule_download)
-                      page.on("dialog", lambda dialog: asyncio.create_task(dialog.dismiss()))
-                  context.on("page", bind)
-
-                  for source in SOURCES:
-                      if found.is_set() or asyncio.get_running_loop().time() - started > 900:
-                          break
-                      print("Browser opening:", source, flush=True)
-                      page = await context.new_page()
-                      try:
-                          await page.goto(source, wait_until="domcontentloaded", timeout=90000)
-                      except Exception as exc:
-                          print("Initial navigation note:", str(exc)[:180], flush=True)
-                      for hop in range(4):
-                          if found.is_set() or asyncio.get_running_loop().time() - started > 900:
-                              break
-                          try:
-                              await page.wait_for_timeout(3500)
-                          except Exception:
-                              pass
-                          if found.is_set():
-                              break
-                          try:
-                              candidates = await page.locator("a,button,input[type=button],input[type=submit],[role=button]").evaluate_all("""
-                              els => els.map((e,i) => {
-                                const text = ((e.innerText || e.value || e.getAttribute('aria-label') || '') + '').trim().replace(/\\s+/g,' ').slice(0,100);
-                                const href = e.href || e.getAttribute('href') || '';
-                                const onclick = e.getAttribute('onclick') || '';
-                                return {i, tag:e.tagName, text, href, onclick, disabled:!!e.disabled};
-                              })
-                              """)
-                          except Exception:
-                              candidates = []
-                          def score(x):
-                              label=(x.get("text","") or "").strip().lower()
-                              text=(label+" "+x.get("href","")+" "+x.get("onclick","")).lower()
-                              host=urlparse(x.get("href","")).netloc.lower()
-                              consent=label in ["deny","reject","reject all","accept all","accept","agree","i agree","allow all","adjust","consent"]
-                              source_host=("cdn9mc.com" in host or "linkify.ru" in host)
-                              if not source_host and not consent: return -100
-                              s=0
-                              if label in ["download","download apk","download file","get file"]: s+=30
-                              elif any(k in text for k in ["download","get file","start download"]): s+=15
-                              if source_host: s+=12
-                              if consent: s+=25
-                              if any(k in text for k in ["doubleclick","adservice","googlesyndication","ggclicker","advert","alibaba"]): s-=100
-                              if x.get("disabled"): s-=100
-                              if x.get("tag")=="BUTTON" or "button" in x.get("href","").lower(): s+=2
-                              return s
-                          candidates=sorted((x for x in candidates if score(x)>0),key=score,reverse=True)[:1]
-                          if not candidates:
-                              # Switch to the latest popup only to handle exact consent/download controls.
-                              if pages:
-                                  page=pages[-1]
-                              await page.wait_for_timeout(1800)
-                              continue
-                          for item in candidates:
-                              if found.is_set(): break
-                              print("Trying page action:", item.get("text","")[:60], item.get("href","")[:160], flush=True)
-                              try:
-                                  locator=page.locator("a,button,input[type=button],input[type=submit],[role=button]").nth(item["i"])
-                                  await locator.click(timeout=5000, force=True, no_wait_after=True)
-                              except Exception:
-                                  href=item.get("href","")
-                                  if href.startswith(("http://","https://")) and any(k in href.lower() for k in ["dl2.php","download","linkify.ru"]):
-                                      try: await page.goto(href,wait_until="domcontentloaded",timeout=30000)
-                                      except Exception: pass
-                              await page.wait_for_timeout(1800)
-                          # Choose the most recently opened page after target=_blank/new-window redirects.
-                          if pages:
-                              page=pages[-1]
-                  # Do not close the page/context before saving any download event.
-                  # CDN pages trigger a download asynchronously after the button click.
-                  if download_tasks:
-                      pending_downloads = tuple(download_tasks)
-                      try:
-                          await asyncio.wait_for(
-                              asyncio.gather(*pending_downloads, return_exceptions=True),
-                              timeout=180,
-                          )
-                      except asyncio.TimeoutError:
-                          print("Timed out waiting for the pending APK download save.", flush=True)
-                  await browser.close()
-              if not found.is_set() or not OUT.is_file():
-                  raise SystemExit("Browser did not obtain a complete APK; no broken output was produced.")
-          asyncio.run(main())
-          PY
-            fi
-            if [ ! -s minecraft_input/base.apk ]; then
-              echo "::error::Could not obtain a complete Apollon base APK; refusing to generate a gray-screen/crashing client."
-              exit 1
-            fi
-          fi
-
-          test -s minecraft_input/base.apk
-          file minecraft_input/base.apk
-          sha256sum minecraft_input/base.apk | tee minecraft_input/base.sha256
-          unzip -tq minecraft_input/base.apk
-          echo "Full base APK structure verified; continuing to final packaging."
-
-      - name: Setup Android SDK build tools
-        if: steps.source_mode.outputs.reuse != 'true'
-        uses: android-actions/setup-android@v4
-        with:
-          packages: 'platform-tools build-tools;35.0.0 platforms;android-35'
-
-      - name: Setup Java 17 for final packaging
-        if: steps.source_mode.outputs.reuse != 'true'
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Prepare embedded Minecraft build
-        if: steps.source_mode.outputs.reuse != 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-          python3 patch/embed_minecraft.py --input minecraft_input --wlz-apk app/build/outputs/apk/debug/app-debug.apk --out dist/WLZ-Minecraft-unsigned.apk
-          python3 -m py_compile patch/branding_and_runtime.py
-          python3 patch/branding_and_runtime.py dist/WLZ-Minecraft-unsigned.apk
-
           BT="$(ls -1 "${ANDROID_HOME}/build-tools" | sort -V | tail -n 1)"
-          ZIPALIGN="${ANDROID_HOME}/build-tools/${BT}/zipalign"
-          APKSIGNER="${ANDROID_HOME}/build-tools/${BT}/apksigner"
           AAPT2="${ANDROID_HOME}/build-tools/${BT}/aapt2"
+          APKSIGNER="${ANDROID_HOME}/build-tools/${BT}/apksigner"
 
-          "${ZIPALIGN}" -P 16 -f 4 dist/WLZ-Minecraft-unsigned.apk dist/WLZ-Minecraft-aligned.apk
-          keytool -genkeypair -v \
-            -keystore dist/wlz-ci.jks -storepass wlzclient -keypass wlzclient \
-            -alias wlz -keyalg RSA -keysize 2048 -validity 10000 \
-            -dname "CN=WLZ Client,O=WLZ"
-          "${APKSIGNER}" sign --ks dist/wlz-ci.jks --ks-pass pass:wlzclient \
-            --key-pass pass:wlzclient --out dist/WLZ-Client-2.4.3.apk \
-            dist/WLZ-Minecraft-aligned.apk
-          "${APKSIGNER}" verify --verbose dist/WLZ-Client-2.4.3.apk
+          "${APKSIGNER}" verify --verbose "$APK"
+          BADGING="$("${AAPT2}" dump badging "$APK")"
+          printf '%s\n' "$BADGING" | grep -q "package: name='com.wlzclient.launcher'"
+          printf '%s\n' "$BADGING" | tee app-badging.txt
+          "${AAPT2}" dump xmltree "$APK" --file AndroidManifest.xml > manifest-tree.txt
+          grep -q 'com.mojang.minecraftpe' manifest-tree.txt
+          grep -q 'com.mojang.minecraftpe.preview' manifest-tree.txt
+          grep -q 'com.wlz.client.MainActivity' manifest-tree.txt
+          if grep -q 'com.mojang.minecraftpe.MainActivity' manifest-tree.txt; then
+            echo "WLZ launcher must not bundle/declare an in-process Minecraft Activity."
+            exit 1
+          fi
+          unzip -tq "$APK"
 
-          BADGING="$("${AAPT2}" dump badging dist/WLZ-Client-2.4.3.apk)"
-          printf '%s\n' "$BADGING" | grep -q "package: name='com.mojang.minecraftpe'"
-          printf '%s\n' "$BADGING" | tee dist/aapt-badging.txt
-          "${AAPT2}" dump xmltree dist/WLZ-Client-2.4.3.apk --file AndroidManifest.xml > dist/manifest-tree.txt
-          grep -q 'E: manifest' dist/manifest-tree.txt
-          grep -q 'E: application' dist/manifest-tree.txt
-          echo "SDK portion of final binary manifest:"
-          grep -n -A 3 -B 1 'uses-sdk\|minSdkVersion' dist/manifest-tree.txt || true
-          grep -q 'com.wlz.client.WlzApplication' dist/manifest-tree.txt
-          grep -q 'com.wlz.client.MainActivity' dist/manifest-tree.txt
-          unzip -tq dist/WLZ-Client-2.4.3.apk
-          unzip -Z1 dist/WLZ-Client-2.4.3.apk | grep -q '^assets/'
-          unzip -Z1 dist/WLZ-Client-2.4.3.apk | grep -qx 'resources.arsc'
-          unzip -Z1 dist/WLZ-Client-2.4.3.apk | grep -qx 'lib/arm64-v8a/libminecraftpe.so'
-          test -s dist/WLZ-Client-2.4.3.apk
-          sha256sum dist/WLZ-Client-2.4.3.apk | tee dist/SHA256SUMS.txt
+          mkdir -p dist
+          cp "$APK" dist/WLZ-Launcher-2.5.0.apk
+          unzip -tq dist/WLZ-Launcher-2.5.0.apk
+          sha256sum dist/WLZ-Launcher-2.5.0.apk | tee dist/SHA256SUMS.txt
+          echo "Built standalone launcher; Minecraft is opened from the user's existing installation."
 
-      - name: Show artifacts
-        run: find dist -maxdepth 1 -type f -printf '%f %s bytes\n' | sort
-
-      - name: Upload APK
+      - name: Upload installable launcher
         uses: actions/upload-artifact@v4
         with:
-          name: WLZ-Client-2.4.3-APK
-          path: dist/WLZ-Client-2.4.3.apk
+          name: WLZ-Launcher-2.5.0-APK
+          path: dist/WLZ-Launcher-2.5.0.apk
           if-no-files-found: error
 
-      - name: Publish one direct APK download
+      - name: Publish direct APK download
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          TAG="v2.4.3"
+          TAG="v2.5.0-launcher"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/WLZ-Client-2.4.3.apk --clobber
+            gh release upload "$TAG" dist/WLZ-Launcher-2.5.0.apk --clobber
           else
-            gh release create "$TAG" dist/WLZ-Client-2.4.3.apk \
-              --title "WLZ Client 2.4.3" \
-              --notes "WLZ Client ARM64 APK. Built and APK-signature verified by GitHub Actions. Back up Minecraft worlds before replacing test builds."
+            gh release create "$TAG" dist/WLZ-Launcher-2.5.0.apk \
+              --title "WLZ Launcher 2.5.0" \
+              --notes "Standalone WLZ launcher. Opens an existing Minecraft Bedrock installation; it does not bundle Minecraft. Android app isolation means the launcher cannot inject its native HUD/modules into another app."
           fi

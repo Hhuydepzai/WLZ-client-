@@ -10,12 +10,6 @@ android {
         targetSdk 35
         versionCode 243
         versionName '2.4.3'
-
-        ndk { abiFilters 'arm64-v8a' }
-
-        externalNativeBuild {
-            cmake { cppFlags '-std=c++17 -O2 -ffunction-sections -fdata-sections' }
-        }
     }
 
     buildTypes {
@@ -31,18 +25,4 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 
-    externalNativeBuild {
-        cmake { path 'src/main/cpp/CMakeLists.txt' }
-    }
-
-    packaging {
-        jniLibs { useLegacyPackaging true }
-        resources { excludes += ['/META-INF/{AL2.0,LGPL2.1}'] }
-    }
-
-    dependencies {
-        // Compile-only stub for the original PairIP Application superclass.
-        // The real class comes from the original Apollon base DEX.
-        compileOnly files('minecraft-application-stub.jar')
-    }
 }

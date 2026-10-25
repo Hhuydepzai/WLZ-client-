@@ -27,7 +27,10 @@ import java.util.ArrayList;
 import java.util.Locale;
 
 public final class MainActivity extends Activity {
-    private static final String MC_ACTIVITY = "com.mojang.minecraftpe.MainActivity";
+    private static final String[] MC_PACKAGES = {
+            "com.mojang.minecraftpe",
+            "com.mojang.minecraftpe.preview"
+    };
     private static final int REQUEST_IMPORT_FIXLAG_PACKS = 2606;
     private static final int BG = Color.rgb(8, 9, 12);
     private static final int PANEL = Color.rgb(18, 20, 25);
@@ -84,28 +87,28 @@ public final class MainActivity extends Activity {
 
         LinearLayout gridA = new LinearLayout(this);
         gridA.setOrientation(LinearLayout.HORIZONTAL);
-        gridA.addView(featureCard("FIX LAG", "Ba cấu hình hiệu năng", "01"),
+        gridA.addView(featureCard("MINECRAFT", "Mở game đã cài sẵn", "01"),
                 new LinearLayout.LayoutParams(0, dp(92), 1f));
         LinearLayout.LayoutParams gap = new LinearLayout.LayoutParams(0, dp(92), 1f);
         gap.leftMargin = dp(10);
-        gridA.addView(featureCard("FUNCTIONS", "Chức năng trong game", "02"), gap);
+        gridA.addView(featureCard("WLZ LAUNCHER", "Ứng dụng gọn nhẹ", "02"), gap);
         page.addView(gridA, top(10, dp(92)));
 
         LinearLayout gridB = new LinearLayout(this);
         gridB.setOrientation(LinearLayout.HORIZONTAL);
-        gridB.addView(featureCard("CONTROLS", "Map phím và vị trí nút", "03"),
+        gridB.addView(featureCard("CONTROLS", "Cấu hình nút trong WLZ", "03"),
                 new LinearLayout.LayoutParams(0, dp(92), 1f));
         LinearLayout.LayoutParams infoGap = new LinearLayout.LayoutParams(0, dp(92), 1f);
         infoGap.leftMargin = dp(10);
-        gridB.addView(featureCard("RUNTIME", "Trạng thái Minecraft", "04"), infoGap);
+        gridB.addView(featureCard("RUNTIME", "Phát hiện game đã cài", "04"), infoGap);
         page.addView(gridB, top(10, dp(92)));
 
         page.addView(buildQuickActions(), top(18, -2));
 
-        TextView foot = text("WLZ CLIENT  •  BEDROCK ARM64", 9, Color.rgb(93, 98, 107), true);
+        TextView foot = text("WLZ LAUNCHER  •  MINECRAFT EXTERNAL", 9, Color.rgb(93, 98, 107), true);
         foot.setGravity(Gravity.CENTER);
         page.addView(foot, top(20, -2));
-        TextView foot2 = text("Giao diện WLZ • Không sửa dữ liệu thế giới", 9, Color.rgb(81, 86, 95), false);
+        TextView foot2 = text("Mở game hiện có • Không sao chép dữ liệu game", 9, Color.rgb(81, 86, 95), false);
         foot2.setGravity(Gravity.CENTER);
         page.addView(foot2, top(5, -2));
 
@@ -197,7 +200,7 @@ public final class MainActivity extends Activity {
         card.addView(headline, top(7, -2));
 
         TextView description = text(
-                "Khởi chạy Minecraft và sử dụng nút WLZ tròn trong game để mở ClickGUI.",
+                "Mở Minecraft Bedrock đã cài trên máy. WLZ không nhúng thêm một bản Minecraft vào APK.",
                 11, MUTED, false);
         description.setLineSpacing(dp(3), 1.0f);
         card.addView(description, top(7, -2));
@@ -240,143 +243,82 @@ public final class MainActivity extends Activity {
         panel.setPadding(dp(14), dp(14), dp(14), dp(14));
         panel.setBackground(round(PANEL, STROKE, 1, 18));
 
-        TextView title = text("ĐIỀU KHIỂN WLZ", 11, TEXT, true);
-        panel.addView(title);
+        panel.addView(text("CHẾ ĐỘ LAUNCHER ĐỘC LẬP", 11, TEXT, true));
 
         TextView info = text(
-                "Map phím luôn sẵn sàng. Bật chức năng sẽ dùng ngay phím đã gán, không cần bật Hotkeys riêng.",
+                "WLZ sẽ mở Minecraft Bedrock đã cài trên máy. Android tách từng ứng dụng, nên HUD/native module và tự bật Global Resources không thể tự chèn vào Minecraft bên ngoài.",
                 10, MUTED, false);
-        info.setLineSpacing(dp(2), 1.0f);
-        panel.addView(info, top(5, -2));
+        info.setLineSpacing(dp(3), 1.0f);
+        panel.addView(info, top(6, -2));
 
-        Button map = button("MAP PHÍM & VỊ TRÍ NÚT");
-        map.setTextColor(TEXT);
+        Button check = button("KIỂM TRA MINECRAFT ĐÃ CÀI");
+        check.setTextColor(TEXT);
+        check.setBackground(round(PANEL_2, STROKE, 1, 12));
+        check.setOnClickListener(v -> {
+            refreshRuntime();
+            Toast.makeText(this,
+                    hasMinecraftRuntime() ? "Đã tìm thấy Minecraft. Có thể mở game." : "Chưa tìm thấy Minecraft Bedrock đã cài.",
+                    Toast.LENGTH_LONG).show();
+        });
+        panel.addView(check, top(12, dp(44)));
+
+        Button map = button("CẤU HÌNH MAP PHÍM WLZ");
+        map.setTextColor(ORANGE);
         map.setBackground(round(PANEL_2, STROKE, 1, 12));
         map.setOnClickListener(v -> openKeyMapper());
-        panel.addView(map, top(12, dp(44)));
+        panel.addView(map, top(8, dp(44)));
 
-        Button functions = button("CHỨC NĂNG ĐANG HỖ TRỢ");
-        functions.setTextColor(ORANGE);
-        functions.setBackground(round(PANEL_2, STROKE, 1, 12));
-        functions.setOnClickListener(v -> Toast.makeText(this,
-                "Trong game, chạm nút tròn WLZ rồi mở tab Functions hoặc Controls.",
-                Toast.LENGTH_LONG).show());
-        panel.addView(functions, top(8, dp(44)));
-
-        if (!WlzLagPackManager.isBundled(this)) {
-            TextView packInfo = text(
-                    "Cần nhập 4 pack Fix Lag một lần. Sau đó WLZ tự cài và áp dụng profile, không cần Global Resources.",
-                    9, MUTED, false);
-            packInfo.setLineSpacing(dp(2), 1f);
-            panel.addView(packInfo, top(12, -2));
-
-            Button importPacks = button("NHẬP 4 PACK FIX LAG (MỘT LẦN)");
-            importPacks.setTextColor(TEXT);
-            importPacks.setBackground(round(PANEL_2, ORANGE, 1, 12));
-            importPacks.setOnClickListener(v -> chooseFixLagPacks());
-            panel.addView(importPacks, top(7, dp(44)));
-        }
+        TextView note = text(
+                "Map phím tại đây chỉ lưu cấu hình của WLZ; nó không điều khiển trực tiếp một app Minecraft khác.",
+                9, MUTED, false);
+        note.setLineSpacing(dp(2), 1.0f);
+        panel.addView(note, top(8, -2));
         return panel;
     }
 
-    private void chooseFixLagPacks() {
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType("*/*");
-        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
-        intent.putExtra(Intent.EXTRA_MIME_TYPES,
-                new String[]{"application/zip", "application/octet-stream"});
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        try {
-            startActivityForResult(intent, REQUEST_IMPORT_FIXLAG_PACKS);
-        } catch (Throwable error) {
-            Toast.makeText(this, "Không mở được trình chọn file.", Toast.LENGTH_LONG).show();
-        }
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode != REQUEST_IMPORT_FIXLAG_PACKS || resultCode != RESULT_OK || data == null) return;
-
-        ArrayList<Uri> selected = new ArrayList<Uri>();
-        ClipData clip = data.getClipData();
-        if (clip != null) {
-            for (int i = 0; i < clip.getItemCount(); i++) {
-                Uri uri = clip.getItemAt(i).getUri();
-                if (uri != null) selected.add(uri);
-            }
-        } else if (data.getData() != null) {
-            selected.add(data.getData());
-        }
-
-        int imported = 0;
-        for (Uri uri : selected) {
-            String displayName = getDisplayName(uri);
-            String canonical = canonicalFixLagName(displayName);
-            if (canonical == null) continue;
-            try {
-                InputStream stream = getContentResolver().openInputStream(uri);
-                WlzLagPackManager.importPack(this, canonical, stream);
-                imported++;
-            } catch (Throwable error) {
-                Toast.makeText(this, "Không nhập được " + displayName, Toast.LENGTH_LONG).show();
-            }
-        }
-
-        if (WlzLagPackManager.isBundled(this)) {
-            Toast.makeText(this,
-                    "Đã lưu đủ 4 pack. Vào Minecraft → Fix Lag 1/2/3 để tự áp dụng.",
-                    Toast.LENGTH_LONG).show();
-        } else {
-            Toast.makeText(this,
-                    "Đã nhập " + imported + " pack ở lượt này. Hãy chọn đủ 4 file: 2 pack chung, fixlag2.mcpack và fixlag3.mcpack.",
-                    Toast.LENGTH_LONG).show();
-        }
-        recreate();
-    }
-
-    private String getDisplayName(Uri uri) {
-        try (Cursor cursor = getContentResolver().query(
-                uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
-            if (cursor != null && cursor.moveToFirst()) {
-                int col = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
-                if (col >= 0) return cursor.getString(col);
-            }
-        } catch (Throwable ignored) {}
-        String path = uri == null ? "" : uri.getLastPathSegment();
-        return path == null ? "" : path;
-    }
-
-    private String canonicalFixLagName(String displayName) {
-        if (displayName == null) return null;
-        String name = displayName.trim().toLowerCase(Locale.ROOT);
-        if (name.equals("fixlag2.mcpack")) return "fixlag2.mcpack";
-        if (name.equals("fixlag3.mcpack")) return "fixlag3.mcpack";
-        if (name.startsWith("fixlag chung cho 2 bản2")) return "common_b.mcpack";
-        if (name.startsWith("fixlag chung cho 2 bản")) return "common_a.mcpack";
-        return null;
-    }
-
     private void launchMinecraft() {
-        if (!hasMinecraftRuntime()) {
-            refreshRuntime();
+        String packageName = findInstalledMinecraftPackage();
+        if (packageName == null) {
+            if (runtimeStatus != null) {
+                runtimeStatus.setText("CHƯA TÌM THẤY MINECRAFT BEDROCK");
+                runtimeStatus.setTextColor(Color.rgb(255, 153, 102));
+            }
             Toast.makeText(this,
-                    "Minecraft runtime không có trong APK này. Không thể mở game.",
+                    "Chưa tìm thấy Minecraft Bedrock đã cài. Cài/mở Minecraft ít nhất một lần rồi thử lại.",
                     Toast.LENGTH_LONG).show();
             return;
         }
+
         try {
-            Intent intent = new Intent();
-            intent.setComponent(new ComponentName(getPackageName(), MC_ACTIVITY));
-            intent.addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
-            startActivity(intent);
+            Intent launchIntent = getPackageManager().getLaunchIntentForPackage(packageName);
+            if (launchIntent == null) {
+                Toast.makeText(this, "Minecraft đã được phát hiện nhưng không có màn hình khởi chạy.", Toast.LENGTH_LONG).show();
+                return;
+            }
+            launchIntent.addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+            startActivity(launchIntent);
         } catch (Throwable error) {
-            if (runtimeStatus != null) runtimeStatus.setText("KHÔNG MỞ ĐƯỢC MINECRAFT");
+            Log.e("WLZStartup", "Could not open installed Minecraft package " + packageName, error);
+            if (runtimeStatus != null) {
+                runtimeStatus.setText("KHÔNG MỞ ĐƯỢC MINECRAFT");
+                runtimeStatus.setTextColor(Color.rgb(255, 153, 102));
+            }
             Toast.makeText(this,
-                    "Không mở được Minecraft. Hãy kiểm tra log crash; WLZ không tự đóng app.",
+                    "Không mở được Minecraft đã cài. Kiểm tra xem game có bị tắt/vô hiệu hóa không.",
                     Toast.LENGTH_LONG).show();
         }
+    }
+
+    private String findInstalledMinecraftPackage() {
+        for (String packageName : MC_PACKAGES) {
+            try {
+                Intent launchIntent = getPackageManager().getLaunchIntentForPackage(packageName);
+                if (launchIntent != null) return packageName;
+            } catch (Throwable error) {
+                Log.w("WLZStartup", "Package query failed for " + packageName, error);
+            }
+        }
+        return null;
     }
 
     private void openKeyMapper() {
@@ -388,22 +330,28 @@ public final class MainActivity extends Activity {
     }
 
     private boolean hasMinecraftRuntime() {
-        try {
-            Class.forName(MC_ACTIVITY, false, getClassLoader());
-            return true;
-        } catch (Throwable ignored) {
-            return false;
-        }
+        return findInstalledMinecraftPackage() != null;
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        refreshRuntime();
     }
 
     private void refreshRuntime() {
         boolean ready = hasMinecraftRuntime();
-        runtimeStatus.setText(ready ? "●  GAME RUNTIME ĐƯỢC PHÁT HIỆN" : "●  KHÔNG TÌM THẤY GAME RUNTIME");
-        runtimeStatus.setTextColor(ready ? Color.rgb(106, 208, 138) : Color.rgb(255, 153, 102));
-        if (playButton != null) playButton.setEnabled(ready);
-        if (playButton != null && !ready) {
-            playButton.setText("RUNTIME CHƯA SẴN SÀNG");
-            playButton.setAlpha(0.58f);
+        if (runtimeStatus != null) {
+            runtimeStatus.setText(ready
+                    ? "●  MINECRAFT ĐÃ CÀI • SẴN SÀNG MỞ"
+                    : "●  CHƯA TÌM THẤY MINECRAFT BEDROCK");
+            runtimeStatus.setTextColor(ready
+                    ? Color.rgb(106, 208, 138)
+                    : Color.rgb(255, 153, 102));
+        }
+        if (playButton != null) {
+            playButton.setEnabled(true);
+            playButton.setAlpha(1.0f);
+            playButton.setText(ready ? "▶    MỞ MINECRAFT ĐÃ CÀI" : "CÀI MINECRAFT TRƯỚC");
         }
     }
 
