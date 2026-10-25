@@ -161,7 +161,10 @@ public final class MainActivity extends Activity {
         playButton.setTextSize(13);
         playButton.setTextColor(Color.WHITE);
         playButton.setBackground(round(ORANGE, ORANGE, 1, 14));
-        playButton.setOnClickListener(v -> launchMinecraft());
+        playButton.setOnClickListener(v -> {
+            if (findInstalledMinecraftApps().isEmpty()) showAllAppsChooser();
+            else launchMinecraft();
+        });
         card.addView(playButton, top(14, dp(54)));
 
         return card;
@@ -176,14 +179,14 @@ public final class MainActivity extends Activity {
                 runtimeStatus.setText("●  ĐÃ TÌM THẤY MINECRAFT");
                 runtimeStatus.setTextColor(Color.rgb(106, 208, 138));
             } else {
-                runtimeStatus.setText("●  CHƯA TÌM THẤY MINECRAFT");
+                runtimeStatus.setText("●  CHƯA NHẬN DIỆN · CHỌN THỦ CÔNG");
                 runtimeStatus.setTextColor(Color.rgb(255, 153, 102));
             }
         }
         if (playButton != null) {
             playButton.setEnabled(true);
             playButton.setAlpha(1.0f);
-            playButton.setText(found ? "▶  MỞ MINECRAFT ĐÃ CÀI" : "THỬ TÌM LẠI MINECRAFT");
+            playButton.setText(found ? "▶  MỞ MINECRAFT ĐÃ CÀI" : "CHỌN ỨNG DỤNG ĐÃ CÀI");
         }
     }
 
@@ -258,9 +261,7 @@ public final class MainActivity extends Activity {
     private void launchMinecraft() {
         refreshRuntime();
         if (detectedGames.isEmpty()) {
-            Toast.makeText(this,
-                    "Không thấy ứng dụng Minecraft có thể mở. Kiểm tra Minecraft đã cài và chưa bị tắt, rồi bấm thử lại.",
-                    Toast.LENGTH_LONG).show();
+            showAllAppsChooser();
             return;
         }
         if (detectedGames.size() > 1) {
@@ -273,11 +274,7 @@ public final class MainActivity extends Activity {
     private void showMinecraftChooser() {
         refreshRuntime();
         if (detectedGames.isEmpty()) {
-            new AlertDialog.Builder(this)
-                    .setTitle("Chưa tìm thấy Minecraft")
-                    .setMessage("Cài hoặc bật Minecraft Bedrock trên thiết bị, rồi quay lại WLZ và bấm “Thử tìm lại Minecraft”. Nếu bạn dùng bản đã đổi tên package, mở bản đó một lần để Android đăng ký màn hình khởi chạy.")
-                    .setPositiveButton("ĐÃ HIỂU", (dialog, which) -> dialog.dismiss())
-                    .show();
+            showAllAppsChooser();
             return;
         }
 
@@ -293,13 +290,82 @@ public final class MainActivity extends Activity {
                 .show();
     }
 
+
+    /** Fallback for renamed Minecraft packages and labels. */
+    private void showAllAppsChooser() {
+        List<MinecraftTarget> apps = findAllLaunchableApps();
+        if (apps.isEmpty()) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Không có ứng dụng để mở")
+                    .setMessage("Android không tìm thấy ứng dụng nào có màn hình khởi chạy. Hãy kiểm tra game đã cài, không bị tắt và mở được từ màn hình chính.")
+                    .setPositiveButton("ĐÃ HIỂU", (dialog, which) -> dialog.dismiss())
+                    .show();
+            return;
+        }
+        String[] labels = new String[apps.size()];
+        for (int i = 0; i < apps.size(); i++) {
+            MinecraftTarget app = apps.get(i);
+            labels[i] = app.label + "\n" + app.packageName;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("CHỌN GAME ĐÃ CÀI")
+                .setMessage("Chọn Minecraft Bedrock trong danh sách. WLZ chỉ mở ứng dụng được chọn.")
+                .setItems(labels, (dialog, which) -> launchTarget(apps.get(which)))
+                .setNegativeButton("HỦY", (dialog, which) -> dialog.dismiss())
+                .show();
+    }
+
+    private List<MinecraftTarget> findAllLaunchableApps() {
+        LinkedHashMap<String, MinecraftTarget> apps = new LinkedHashMap<>();
+        PackageManager pm = getPackageManager();
+        Intent query = new Intent(Intent.ACTION_MAIN);
+        query.addCategory(Intent.CATEGORY_LAUNCHER);
+        try {
+            List<ResolveInfo> activities = pm.queryIntentActivities(query, PackageManager.MATCH_DEFAULT_ONLY);
+            for (ResolveInfo info : activities) {
+                if (info == null || info.activityInfo == null || !info.activityInfo.exported) continue;
+                String packageName = info.activityInfo.packageName;
+                if (packageName == null || packageName.isEmpty() || packageName.equals(getPackageName())) continue;
+                String label;
+                try {
+                    CharSequence appLabel = info.loadLabel(pm);
+                    label = appLabel == null ? packageName : appLabel.toString();
+                } catch (Throwable ignored) {
+                    label = packageName;
+                }
+                ComponentName component = new ComponentName(packageName, info.activityInfo.name);
+                apps.putIfAbsent(packageName, new MinecraftTarget(label, packageName, component));
+            }
+        } catch (Throwable error) {
+            Log.e("WLZRuntime", "Could not list launchable apps", error);
+        }
+        List<MinecraftTarget> result = new ArrayList<>(apps.values());
+        result.sort((a, b) -> {
+            boolean am = looksLikeMinecraft(a);
+            boolean bm = looksLikeMinecraft(b);
+            if (am != bm) return am ? -1 : 1;
+            return a.label.compareToIgnoreCase(b.label);
+        });
+        return result;
+    }
+
+    private boolean looksLikeMinecraft(MinecraftTarget target) {
+        String p = target.packageName.toLowerCase(Locale.ROOT);
+        String l = target.label.toLowerCase(Locale.ROOT);
+        return p.contains("minecraft") || p.contains("mojang") || p.contains("apollon")
+                || l.contains("minecraft") || l.contains("bedrock") || l.contains("apollon");
+    }
+
     private void launchTarget(MinecraftTarget target) {
         try {
-            Intent intent = getPackageManager().getLaunchIntentForPackage(target.packageName);
-            if (intent == null && target.component != null) {
+            Intent intent = null;
+            if (target.component != null) {
                 intent = new Intent(Intent.ACTION_MAIN);
                 intent.addCategory(Intent.CATEGORY_LAUNCHER);
                 intent.setComponent(target.component);
+            }
+            if (intent == null) {
+                intent = getPackageManager().getLaunchIntentForPackage(target.packageName);
             }
             if (intent == null) {
                 Toast.makeText(this, "Đã thấy Minecraft nhưng Android không cung cấp màn hình khởi chạy.", Toast.LENGTH_LONG).show();
