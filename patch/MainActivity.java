@@ -119,7 +119,7 @@ public final class MainActivity extends Activity {
         labels.addView(text("MINECRAFT BEDROCK", 9, MUTED, true), top(2, -2));
         row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView version = text("V2.5.4", 9, ORANGE, true);
+        TextView version = text("V2.5.5", 9, ORANGE, true);
         version.setGravity(Gravity.CENTER);
         version.setPadding(dp(11), dp(7), dp(11), dp(7));
         version.setBackground(round(PANEL_2, STROKE, 1, 20));
@@ -358,25 +358,51 @@ public final class MainActivity extends Activity {
     }
 
     private void launchTarget(MinecraftTarget target) {
+        if (target == null || target.packageName == null || target.packageName.isEmpty()) {
+            Toast.makeText(this, "Chưa chọn được ứng dụng Minecraft.", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        PackageManager pm = getPackageManager();
         try {
-            Intent intent = null;
-            if (target.component != null) {
+            // Prefer Android's canonical launch intent. Some sideloaded Bedrock
+            // builds expose an activity alias or require flags that a hand-built
+            // MAIN/LAUNCHER intent may omit.
+            Intent intent = pm.getLaunchIntentForPackage(target.packageName);
+
+            // Fallback for renamed/side-loaded clients for which Android cannot
+            // synthesize a package launch intent but did expose a launcher activity.
+            if (intent == null && target.component != null) {
                 intent = new Intent(Intent.ACTION_MAIN);
                 intent.addCategory(Intent.CATEGORY_LAUNCHER);
                 intent.setComponent(target.component);
             }
+
             if (intent == null) {
-                intent = getPackageManager().getLaunchIntentForPackage(target.packageName);
-            }
-            if (intent == null) {
-                Toast.makeText(this, "Đã thấy Minecraft nhưng Android không cung cấp màn hình khởi chạy.", Toast.LENGTH_LONG).show();
+                Log.w("WLZRuntime", "No launch intent for package " + target.packageName);
+                Toast.makeText(this,
+                        "Android không tìm thấy nút mở cho " + target.label
+                                + ". Mở game một lần từ màn hình chính rồi thử lại.",
+                        Toast.LENGTH_LONG).show();
                 return;
             }
+
             intent.addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+            Log.i("WLZRuntime", "Launching installed game package=" + target.packageName
+                    + " component=" + intent.getComponent());
             startActivity(intent);
+        } catch (SecurityException error) {
+            Log.e("WLZRuntime", "Android denied launch for " + target.packageName, error);
+            Toast.makeText(this,
+                    "Android chặn việc mở " + target.label
+                            + ". Kiểm tra game đã bật và không bị giới hạn bởi hệ thống.",
+                    Toast.LENGTH_LONG).show();
         } catch (Throwable error) {
             Log.e("WLZRuntime", "Failed to open " + target.packageName, error);
-            Toast.makeText(this, "Không mở được " + target.label + ". Kiểm tra ứng dụng có bị tắt hoặc bị giới hạn không.", Toast.LENGTH_LONG).show();
+            Toast.makeText(this,
+                    "Không mở được " + target.label + " (" + target.packageName + "). "
+                            + "Nếu vẫn lỗi, gửi ảnh thông báo này cho WLZ để dò đúng package.",
+                    Toast.LENGTH_LONG).show();
         }
     }
 
