@@ -119,7 +119,7 @@ public final class MainActivity extends Activity {
         labels.addView(text("MINECRAFT BEDROCK", 9, MUTED, true), top(2, -2));
         row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        TextView version = text("V2.5.3", 9, ORANGE, true);
+        TextView version = text("V2.5.4", 9, ORANGE, true);
         version.setGravity(Gravity.CENTER);
         version.setPadding(dp(11), dp(7), dp(11), dp(7));
         version.setBackground(round(PANEL_2, STROKE, 1, 20));
@@ -192,7 +192,7 @@ public final class MainActivity extends Activity {
 
     /**
      * Detect both the usual Bedrock package IDs and any visible launcher app
-     * whose package name or displayed label contains "Minecraft". The manifest
+     * whose package name contains "com.mojang" or whose name/label identifies Minecraft. The manifest
      * declares a MAIN/LAUNCHER query so Android 11+ package visibility applies.
      */
     private List<MinecraftTarget> findInstalledMinecraftApps() {
@@ -232,7 +232,8 @@ public final class MainActivity extends Activity {
                 String p = packageName.toLowerCase(Locale.ROOT);
                 String l = label.toLowerCase(Locale.ROOT);
                 boolean looksLikeMinecraft =
-                        p.contains("minecraft") || l.contains("minecraft")
+                        p.contains("com.mojang") || p.contains("minecraft")
+                                || l.contains("minecraft") || l.contains("bedrock")
                                 || KNOWN_MINECRAFT_PACKAGES[0].equals(packageName)
                                 || KNOWN_MINECRAFT_PACKAGES[1].equals(packageName);
                 if (!looksLikeMinecraft) continue;
