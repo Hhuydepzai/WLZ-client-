@@ -9,17 +9,13 @@ import android.content.Intent;
 import android.os.Build;
 import android.os.IBinder;
 import android.provider.Settings;
-import android.util.Log;
 
 public final class WlzPreloadService extends Service {
-    public static final String ACTION_START_CLIENT = "com.wlz.client.action.START_CLIENT";
     public static final String ACTION_SHOW_OVERLAY = "com.wlz.client.action.SHOW_OVERLAY";
 
     private static final String CHANNEL = "wlz_runtime";
-    private static final long OVERLAY_DELAY_MS = 2400L;
 
     private WlzOverlayController overlay;
-    private final android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
 
     @Override
     public void onCreate() {
@@ -30,41 +26,9 @@ public final class WlzPreloadService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        String action = intent == null ? ACTION_SHOW_OVERLAY : intent.getAction();
-
-        if (ACTION_START_CLIENT.equals(action)) {
-            launchMinecraftThenOverlay();
-            return START_STICKY;
-        }
-
+        // WLZ is a standalone floating control. Never launch Minecraft here.
         showOverlay();
         return START_STICKY;
-    }
-
-    private void launchMinecraftThenOverlay() {
-        Intent minecraft = getPackageManager().getLaunchIntentForPackage("com.mojang.minecraftpe");
-        if (minecraft == null) {
-            Log.w("WLZRuntime", "Minecraft package not installed");
-            stopSelf();
-            return;
-        }
-
-        try {
-            minecraft.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
-            startActivity(minecraft);
-        } catch (Throwable e) {
-            Log.e("WLZRuntime", "Minecraft launch failed", e);
-            stopSelf();
-            return;
-        }
-
-        handler.removeCallbacksAndMessages(null);
-        if (Settings.canDrawOverlays(this)) {
-            handler.postDelayed(this::showOverlay, OVERLAY_DELAY_MS);
-        } else {
-            Log.i("WLZRuntime", "Overlay permission missing; Minecraft launched without floating shortcut");
-            handler.postDelayed(this::stopSelf, OVERLAY_DELAY_MS);
-        }
     }
 
     private void showOverlay() {
@@ -112,7 +76,6 @@ public final class WlzPreloadService extends Service {
 
     @Override
     public void onDestroy() {
-        handler.removeCallbacksAndMessages(null);
         if (overlay != null) overlay.close();
         overlay = null;
         super.onDestroy();
