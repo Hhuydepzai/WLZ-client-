@@ -1,12 +1,12 @@
 name: Build WLZ Client
 
 concurrency:
-  group: wlz-build
+  group: wlz-build-${{ github.ref }}
   cancel-in-progress: true
 
 on:
   push:
-    branches: [main]
+    branches: [main, rebuild/wlz-064-floating-panel]
   workflow_dispatch:
 
 jobs:
