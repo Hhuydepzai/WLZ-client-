@@ -162,7 +162,7 @@ public final class MainActivity extends Activity {
         playButton.setTextColor(Color.WHITE);
         playButton.setBackground(round(ORANGE, ORANGE, 1, 14));
         playButton.setOnClickListener(v -> {
-            if (findInstalledMinecraftApps().isEmpty()) showAllAppsChooser();
+            if (findInstalledMinecraftApps().isEmpty()) showNoMinecraftDialog();
             else launchMinecraft();
         });
         card.addView(playButton, top(14, dp(54)));
@@ -262,7 +262,7 @@ public final class MainActivity extends Activity {
     private void launchMinecraft() {
         refreshRuntime();
         if (detectedGames.isEmpty()) {
-            showAllAppsChooser();
+            showNoMinecraftDialog();
             return;
         }
         if (detectedGames.size() > 1) {
@@ -275,7 +275,7 @@ public final class MainActivity extends Activity {
     private void showMinecraftChooser() {
         refreshRuntime();
         if (detectedGames.isEmpty()) {
-            showAllAppsChooser();
+            showNoMinecraftDialog();
             return;
         }
 
@@ -292,112 +292,26 @@ public final class MainActivity extends Activity {
     }
 
 
-    /** Fallback chooser. Uses a custom view instead of combining AlertDialog setMessage() + setItems(),
-     * which can leave the list area blank on some Android builds. */
-    private void showAllAppsChooser() {
-        List<MinecraftTarget> apps = findAllLaunchableApps();
-
-        // Even if package visibility returns no launcher activities, show explicit
-        // candidates for the official Bedrock and Preview package IDs. The click
-        // handler will attempt the normal launch intent, then the explicit activity.
-        if (apps.isEmpty()) {
-            apps.add(new MinecraftTarget(
-                    "Minecraft Bedrock (thử mở)",
-                    "com.mojang.minecraftpe",
-                    new ComponentName("com.mojang.minecraftpe",
-                            "com.mojang.minecraftpe.MainActivity")));
-            apps.add(new MinecraftTarget(
-                    "Minecraft Preview (thử mở)",
-                    "com.mojang.minecraftpe.preview",
-                    new ComponentName("com.mojang.minecraftpe.preview",
-                            "com.mojang.minecraftpe.MainActivity")));
-        }
-
-        LinearLayout body = new LinearLayout(this);
-        body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(dp(20), dp(6), dp(20), dp(8));
-
-        TextView hint = text(
-                "Chọn Minecraft đã cài. Nếu danh sách hệ thống trống, thử nút Bedrock bên dưới.",
-                12, MUTED, false);
-        hint.setLineSpacing(dp(2), 1.0f);
-        body.addView(hint, lp(-1, -2));
-
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(false);
-        scroll.setClipToPadding(false);
-
-        LinearLayout rows = new LinearLayout(this);
-        rows.setOrientation(LinearLayout.VERTICAL);
-        rows.setPadding(0, dp(8), 0, dp(4));
-
-        final AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("CHỌN GAME ĐÃ CÀI")
-                .setNegativeButton("HỦY", (d, which) -> d.dismiss())
-                .create();
-
-        for (MinecraftTarget target : apps) {
-            Button item = button(target.label + "\\n" + target.packageName);
-            item.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-            item.setTextColor(TEXT);
-            item.setTextSize(12);
-            item.setPadding(dp(14), dp(6), dp(14), dp(6));
-            item.setBackground(round(PANEL_2, STROKE, 1, 12));
-            item.setMinHeight(dp(54));
-            LinearLayout.LayoutParams itemParams = lp(-1, dp(58));
-            itemParams.bottomMargin = dp(7);
-            rows.addView(item, itemParams);
-            item.setOnClickListener(v -> {
-                dialog.dismiss();
-                launchTarget(target);
-            });
-        }
-
-        scroll.addView(rows, new ScrollView.LayoutParams(-1, -2));
-        body.addView(scroll, top(6, dp(340)));
-        dialog.setView(body);
-        dialog.show();
-    }
-
-    private List<MinecraftTarget> findAllLaunchableApps() {
-        LinkedHashMap<String, MinecraftTarget> apps = new LinkedHashMap<>();
-        PackageManager pm = getPackageManager();
-        Intent query = new Intent(Intent.ACTION_MAIN);
-        query.addCategory(Intent.CATEGORY_LAUNCHER);
-        try {
-            List<ResolveInfo> activities = pm.queryIntentActivities(query, PackageManager.MATCH_DEFAULT_ONLY);
-            for (ResolveInfo info : activities) {
-                if (info == null || info.activityInfo == null || !info.activityInfo.exported) continue;
-                String packageName = info.activityInfo.packageName;
-                if (packageName == null || packageName.isEmpty() || packageName.equals(getPackageName())) continue;
-                String label;
-                try {
-                    CharSequence appLabel = info.loadLabel(pm);
-                    label = appLabel == null ? packageName : appLabel.toString();
-                } catch (Throwable ignored) {
-                    label = packageName;
-                }
-                ComponentName component = new ComponentName(packageName, info.activityInfo.name);
-                apps.putIfAbsent(packageName, new MinecraftTarget(label, packageName, component));
-            }
-        } catch (Throwable error) {
-            Log.e("WLZRuntime", "Could not list launchable apps", error);
-        }
-        List<MinecraftTarget> result = new ArrayList<>(apps.values());
-        result.sort((a, b) -> {
-            boolean am = looksLikeMinecraft(a);
-            boolean bm = looksLikeMinecraft(b);
-            if (am != bm) return am ? -1 : 1;
-            return a.label.compareToIgnoreCase(b.label);
-        });
-        return result;
-    }
-
-    private boolean looksLikeMinecraft(MinecraftTarget target) {
-        String p = target.packageName.toLowerCase(Locale.ROOT);
-        String l = target.label.toLowerCase(Locale.ROOT);
-        return p.contains("minecraft") || p.contains("mojang") || p.contains("apollon")
-                || l.contains("minecraft") || l.contains("bedrock") || l.contains("apollon");
+    /** Never list arbitrary apps. Only offer Minecraft Bedrock / Preview package IDs. */
+    private void showNoMinecraftDialog() {
+        refreshRuntime();
+        new AlertDialog.Builder(this)
+                .setTitle("KHÔNG TÌM THẤY MINECRAFT")
+                .setMessage("WLZ chỉ mở Minecraft Bedrock đã cài. Hãy cài hoặc mở Minecraft một lần từ màn hình chính rồi quay lại đây. WLZ sẽ không liệt kê Chrome, Cài đặt hay các ứng dụng khác.")
+                .setPositiveButton("THỬ BEDROCK", (dialog, which) ->
+                        launchTarget(new MinecraftTarget(
+                                "Minecraft Bedrock",
+                                "com.mojang.minecraftpe",
+                                new ComponentName("com.mojang.minecraftpe",
+                                        "com.mojang.minecraftpe.MainActivity"))))
+                .setNeutralButton("THỬ PREVIEW", (dialog, which) ->
+                        launchTarget(new MinecraftTarget(
+                                "Minecraft Preview",
+                                "com.mojang.minecraftpe.preview",
+                                new ComponentName("com.mojang.minecraftpe.preview",
+                                        "com.mojang.minecraftpe.MainActivity"))))
+                .setNegativeButton("ĐÓNG", (dialog, which) -> dialog.dismiss())
+                .show();
     }
 
     private void launchTarget(MinecraftTarget target) {
