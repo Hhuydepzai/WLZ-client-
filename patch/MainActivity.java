@@ -27,7 +27,6 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 public final class MainActivity extends Activity {
-    private static final String MC_PACKAGE = "com.mojang.minecraftpe";
     private static final String PREFS = "wlz_settings";
 
     private static final int BG = Color.rgb(7, 9, 12);
@@ -177,7 +176,7 @@ public final class MainActivity extends Activity {
         title.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
         h.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
 
-        TextView chip = text("0.6.3", 10, ORANGE_LIGHT, true);
+        TextView chip = text("0.6.4", 10, ORANGE_LIGHT, true);
         chip.setGravity(Gravity.CENTER);
         chip.setPadding(dp(10), dp(6), dp(10), dp(6));
         chip.setBackground(round(ORANGE_DARK, ORANGE, 1, 18));
@@ -200,35 +199,26 @@ public final class MainActivity extends Activity {
         top.addView(badge, lp(-2, -2));
         card.addView(top);
 
-        TextView title = text("Launch → Preload → Overlay", 21, TEXT, true);
+        TextView title = text("Nút nổi → Bảng điều khiển", 21, TEXT, true);
         title.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
         card.addView(title, top(5));
 
-        status = text("Đang kiểm tra Minecraft…", 10, MUTED, false);
+        status = text("Sẵn sàng bật nút tròn WLZ", 10, MUTED, false);
         status.setTypeface(Typeface.MONOSPACE);
         card.addView(status, top(5));
 
         TextView hint = text(
-                "Launcher WLZ độc lập với preload service, module manager và floating shortcut.",
+                "Bật nút tròn để mở bảng điều khiển nổi. WLZ không tự khởi động Minecraft.",
                 9, MUTED, false);
         card.addView(hint, top(7));
         return card;
     }
 
     private View launchActions() {
-        LinearLayout row = new LinearLayout(this);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-
-        Button launch = actionButton("▶  CHẠY MINECRAFT", ORANGE, TEXT);
-        launch.setOnClickListener(v -> launchMinecraft());
-        row.addView(launch, new LinearLayout.LayoutParams(0, dp(52), 1));
-
-        Button runtime = actionButton("◉  BẬT CLIENT", PANEL_2, TEXT);
+        Button runtime = actionButton("◉  BẬT NÚT TRÒN WLZ", ORANGE, TEXT);
         runtime.setOnClickListener(v -> activateClient());
-        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(0, dp(52), 0.68f);
-        rlp.leftMargin = dp(8);
-        row.addView(runtime, rlp);
-        return row;
+        runtime.setMinHeight(dp(52));
+        return runtime;
     }
 
     private View fixLagCard() {
@@ -322,20 +312,6 @@ public final class MainActivity extends Activity {
         return "SIÊU";
     }
 
-    private void launchMinecraft() {
-        Intent intent = getPackageManager().getLaunchIntentForPackage(MC_PACKAGE);
-        if (intent == null) {
-            Toast.makeText(this, "Chưa cài Minecraft Bedrock.", Toast.LENGTH_LONG).show();
-            return;
-        }
-
-        try {
-            startClientService();
-        } catch (Throwable e) {
-            Toast.makeText(this, "Không thể khởi động WLZ runtime.", Toast.LENGTH_LONG).show();
-        }
-    }
-
     private void activateClient() {
         if (!Settings.canDrawOverlays(this)) {
             try {
@@ -351,17 +327,6 @@ public final class MainActivity extends Activity {
         Toast.makeText(this, "WLZ floating shortcut đã khởi động.", Toast.LENGTH_SHORT).show();
     }
 
-    private void startClientService() {
-        Intent intent = new Intent(this, WlzPreloadService.class)
-                .setAction(WlzPreloadService.ACTION_START_CLIENT);
-        try {
-            if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(intent);
-            else startService(intent);
-        } catch (Throwable e) {
-            Toast.makeText(this, "Không thể khởi động WLZ runtime.", Toast.LENGTH_SHORT).show();
-        }
-    }
-
     private void showOverlayService() {
         Intent intent = new Intent(this, WlzPreloadService.class)
                 .setAction(WlzPreloadService.ACTION_SHOW_OVERLAY);
@@ -375,9 +340,8 @@ public final class MainActivity extends Activity {
 
     private void refreshStatus() {
         if (status == null) return;
-        boolean installed = getPackageManager().getLaunchIntentForPackage(MC_PACKAGE) != null;
-        status.setText(installed ? "● Minecraft đã sẵn sàng" : "● Chưa tìm thấy Minecraft trên máy");
-        status.setTextColor(installed ? GREEN : MUTED);
+        status.setText("● Nút tròn WLZ sẵn sàng");
+        status.setTextColor(GREEN);
     }
 
     @Override
