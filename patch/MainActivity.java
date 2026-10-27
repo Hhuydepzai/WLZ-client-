@@ -179,14 +179,14 @@ public final class MainActivity extends Activity {
                 runtimeStatus.setText("●  ĐÃ TÌM THẤY MINECRAFT");
                 runtimeStatus.setTextColor(Color.rgb(106, 208, 138));
             } else {
-                runtimeStatus.setText("●  CHƯA NHẬN DIỆN · CHỌN THỦ CÔNG");
+                runtimeStatus.setText("●  CHƯA TÌM THẤY MINECRAFT · KIỂM TRA GAME ĐÃ CÀI");
                 runtimeStatus.setTextColor(Color.rgb(255, 153, 102));
             }
         }
         if (playButton != null) {
             playButton.setEnabled(true);
             playButton.setAlpha(1.0f);
-            playButton.setText(found ? "▶  MỞ MINECRAFT ĐÃ CÀI" : "CHỌN ỨNG DỤNG ĐÃ CÀI");
+            playButton.setText(found ? "▶  MỞ MINECRAFT ĐÃ CÀI" : "MINECRAFT CHƯA ĐƯỢC TÌM THẤY");
         }
     }
 
