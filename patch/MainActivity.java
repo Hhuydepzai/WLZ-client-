@@ -292,28 +292,71 @@ public final class MainActivity extends Activity {
     }
 
 
-    /** Fallback for renamed Minecraft packages and labels. */
+    /** Fallback chooser. Uses a custom view instead of combining AlertDialog setMessage() + setItems(),
+     * which can leave the list area blank on some Android builds. */
     private void showAllAppsChooser() {
         List<MinecraftTarget> apps = findAllLaunchableApps();
+
+        // Even if package visibility returns no launcher activities, show explicit
+        // candidates for the official Bedrock and Preview package IDs. The click
+        // handler will attempt the normal launch intent, then the explicit activity.
         if (apps.isEmpty()) {
-            new AlertDialog.Builder(this)
-                    .setTitle("Không có ứng dụng để mở")
-                    .setMessage("Android không tìm thấy ứng dụng nào có màn hình khởi chạy. Hãy kiểm tra game đã cài, không bị tắt và mở được từ màn hình chính.")
-                    .setPositiveButton("ĐÃ HIỂU", (dialog, which) -> dialog.dismiss())
-                    .show();
-            return;
+            apps.add(new MinecraftTarget(
+                    "Minecraft Bedrock (thử mở)",
+                    "com.mojang.minecraftpe",
+                    new ComponentName("com.mojang.minecraftpe",
+                            "com.mojang.minecraftpe.MainActivity")));
+            apps.add(new MinecraftTarget(
+                    "Minecraft Preview (thử mở)",
+                    "com.mojang.minecraftpe.preview",
+                    new ComponentName("com.mojang.minecraftpe.preview",
+                            "com.mojang.minecraftpe.MainActivity")));
         }
-        String[] labels = new String[apps.size()];
-        for (int i = 0; i < apps.size(); i++) {
-            MinecraftTarget app = apps.get(i);
-            labels[i] = app.label + "\n" + app.packageName;
-        }
-        new AlertDialog.Builder(this)
+
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(dp(20), dp(6), dp(20), dp(8));
+
+        TextView hint = text(
+                "Chọn Minecraft đã cài. Nếu danh sách hệ thống trống, thử nút Bedrock bên dưới.",
+                12, MUTED, false);
+        hint.setLineSpacing(dp(2), 1.0f);
+        body.addView(hint, lp(-1, -2));
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(false);
+        scroll.setClipToPadding(false);
+
+        LinearLayout rows = new LinearLayout(this);
+        rows.setOrientation(LinearLayout.VERTICAL);
+        rows.setPadding(0, dp(8), 0, dp(4));
+
+        final AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("CHỌN GAME ĐÃ CÀI")
-                .setMessage("Chọn Minecraft Bedrock trong danh sách. WLZ chỉ mở ứng dụng được chọn.")
-                .setItems(labels, (dialog, which) -> launchTarget(apps.get(which)))
-                .setNegativeButton("HỦY", (dialog, which) -> dialog.dismiss())
-                .show();
+                .setNegativeButton("HỦY", (d, which) -> d.dismiss())
+                .create();
+
+        for (MinecraftTarget target : apps) {
+            Button item = button(target.label + "\\n" + target.packageName);
+            item.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+            item.setTextColor(TEXT);
+            item.setTextSize(12);
+            item.setPadding(dp(14), dp(6), dp(14), dp(6));
+            item.setBackground(round(PANEL_2, STROKE, 1, 12));
+            item.setMinHeight(dp(54));
+            LinearLayout.LayoutParams itemParams = lp(-1, dp(58));
+            itemParams.bottomMargin = dp(7);
+            rows.addView(item, itemParams);
+            item.setOnClickListener(v -> {
+                dialog.dismiss();
+                launchTarget(target);
+            });
+        }
+
+        scroll.addView(rows, new ScrollView.LayoutParams(-1, -2));
+        body.addView(scroll, top(6, dp(340)));
+        dialog.setView(body);
+        dialog.show();
     }
 
     private List<MinecraftTarget> findAllLaunchableApps() {
