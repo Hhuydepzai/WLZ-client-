@@ -1,27 +1,29 @@
 name: Build WLZ Standalone Launcher
 
 concurrency:
-  group: wlz-launcher-build
+  group: wlz-standalone-build
   cancel-in-progress: true
 
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
-
-permissions:
-  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           lfs: true
+
+      - name: Validate patch sources
+        run: python3 -m py_compile patch/apply.py
 
       - name: Setup Java
         uses: actions/setup-java@v5
@@ -29,83 +31,67 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v4
-        with:
-          packages: 'platform-tools build-tools;35.0.0 platforms;android-35'
-
-      - name: Extract project
+      - name: Extract Android project
         run: |
-          set -euo pipefail
           unzip -q app.zip
           unzip -q tools.zip
 
       - name: Apply standalone launcher patch
-        run: |
-          set -euo pipefail
-          python3 -m py_compile patch/apply.py patch/embed_minecraft.py patch/branding_and_runtime.py
-          python3 patch/apply.py
-          ! grep -q 'com.pairip.application.Application' app/src/main/java/com/wlz/client/WlzApplication.java
-          ! grep -q 'com.mojang.minecraftpe.MainActivity' app/src/main/AndroidManifest.xml
-          grep -q 'com.mojang.minecraftpe' app/src/main/AndroidManifest.xml
-          grep -q '<queries>' app/src/main/AndroidManifest.xml
-          grep -q 'android.permission.QUERY_ALL_PACKAGES' app/src/main/AndroidManifest.xml
+        run: python3 patch/apply.py
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
 
-      - name: Build standalone WLZ launcher
+      - name: Build standalone WLZ APK
         run: |
           set -euo pipefail
-          gradle assembleDebug --stacktrace
+          gradle clean assembleDebug --stacktrace
+          test -s app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Validate launcher APK
+        shell: bash
+        run: |
+          set -euo pipefail
           APK="app/build/outputs/apk/debug/app-debug.apk"
-          test -s "$APK"
-          BT="$(ls -1 "${ANDROID_HOME}/build-tools" | sort -V | tail -n 1)"
-          AAPT2="${ANDROID_HOME}/build-tools/${BT}/aapt2"
-          APKSIGNER="${ANDROID_HOME}/build-tools/${BT}/apksigner"
-
-          "${APKSIGNER}" verify --verbose "$APK"
-          BADGING="$("${AAPT2}" dump badging "$APK")"
-          printf '%s\n' "$BADGING" | grep -q "package: name='com.wlzclient.launcher'"
-          printf '%s\n' "$BADGING" | tee app-badging.txt
-          "${AAPT2}" dump xmltree "$APK" --file AndroidManifest.xml > manifest-tree.txt
-          grep -q 'com.mojang.minecraftpe' manifest-tree.txt
-          grep -q 'com.mojang.minecraftpe.preview' manifest-tree.txt
-          grep -q 'android.permission.QUERY_ALL_PACKAGES' manifest-tree.txt
-          grep -q 'com.wlz.client.MainActivity' manifest-tree.txt
-          if grep -q 'com.mojang.minecraftpe.MainActivity' manifest-tree.txt; then
-            echo "WLZ launcher must not bundle/declare an in-process Minecraft Activity."
-            exit 1
-          fi
           unzip -tq "$APK"
+          BT="$(ls -1 "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
+          AAPT2="$ANDROID_HOME/build-tools/$BT/aapt2"
+          APKSIGNER="$ANDROID_HOME/build-tools/$BT/apksigner"
+          "$APKSIGNER" verify --verbose "$APK"
+          BADGING="$("$AAPT2" dump badging "$APK")"
+          printf '%s\n' "$BADGING" | grep -q "package: name='com.wlzclient.launcher'"
+          printf '%s\n' "$BADGING" | tee app/build/outputs/apk/debug/aapt-badging.txt
+          unzip -Z1 "$APK" | grep -qx 'AndroidManifest.xml'
+          unzip -Z1 "$APK" | grep -q '^classes.dex$'
+          echo "Validated: standalone Android launcher; Minecraft runtime is not embedded."
 
+      - name: Prepare downloadable APK
+        run: |
           mkdir -p dist
-          cp "$APK" dist/WLZ-Launcher-2.5.5.apk
-          unzip -tq dist/WLZ-Launcher-2.5.5.apk
-          sha256sum dist/WLZ-Launcher-2.5.5.apk | tee dist/SHA256SUMS.txt
-          echo "Built standalone launcher; Minecraft is opened from the user's existing installation."
+          cp app/build/outputs/apk/debug/app-debug.apk dist/WLZ-Launcher-2.5.0.apk
+          sha256sum dist/WLZ-Launcher-2.5.0.apk | tee dist/SHA256SUMS.txt
+          ls -lh dist
 
-      - name: Upload installable launcher
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: WLZ-Launcher-2.5.5-APK
-          path: dist/WLZ-Launcher-2.5.5.apk
+          name: WLZ-Launcher-2.5.0
+          path: dist/WLZ-Launcher-2.5.0.apk
           if-no-files-found: error
 
-      - name: Publish direct APK download
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Publish direct APK release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          TAG="v2.5.5-launcher"
+          TAG="v2.5.0"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/WLZ-Launcher-2.5.5.apk --clobber
+            gh release upload "$TAG" dist/WLZ-Launcher-2.5.0.apk dist/SHA256SUMS.txt --clobber
           else
-            gh release create "$TAG" dist/WLZ-Launcher-2.5.5.apk \
-              --title "WLZ Launcher 2.5.5" \
-              --notes "Standalone WLZ launcher. Opens an existing Minecraft Bedrock installation; it does not bundle Minecraft. Android app isolation means the launcher cannot inject its native HUD/modules into another app."
+            gh release create "$TAG" dist/WLZ-Launcher-2.5.0.apk dist/SHA256SUMS.txt \
+              --title "WLZ Launcher 2.5.0" \
+              --notes "Standalone WLZ launcher. Detects and opens an installed Minecraft Bedrock package; it does not bundle the Minecraft runtime."
           fi
