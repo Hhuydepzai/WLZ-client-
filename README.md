@@ -1,29 +1,31 @@
-# WLZ Client 2.4.3 — startup recovery build
+# WLZ Launcher 2.5.0
 
-- Android 8.0+ (API 26)
-- ARM64 (`arm64-v8a`) devices only
-- Preserves the protected runtime's original package ID `com.mojang.minecraftpe`. This replaces the existing Minecraft package and cannot be installed side-by-side. Back up worlds before installing.
-- Includes the WLZ launcher, Minecraft activity, WLZ HUD/ClickGUI and key mapper.
+WLZ is a small Android launcher for an already-installed Minecraft Bedrock app. It does **not** package Minecraft, copy its DEX/native runtime, or replace the installed game.
 
-## Packaging safeguards
+## What works in this version
 
-The old four-file runtime bundle (`AndroidManifest.xml`, `dex.zip`, `arm64-v8a.zip` and `libminecraftpe.so`) is incomplete by itself: it lacks Minecraft `assets/` and `resources.arsc`, which can lead to a gray screen or crash. The build refuses to publish an incomplete package.
+- Detects the known Bedrock package IDs `com.mojang.minecraftpe` and `com.mojang.minecraftpe.preview`.
+- Opens the installed game through Android's launch intent.
+- Shows whether a supported Minecraft package is installed and lets the user rescan.
+- Uses a standalone WLZ application ID: `com.wlzclient.launcher`.
+- Uses a dark/orange launcher UI and does not depend on Apollon's PairIP Application class.
 
-The packager preserves the complete base APK's:
-- `assets/`
-- `resources.arsc`
-- original Minecraft/PairIP DEX and native bootstrap
-- package ID, provider authorities and game storage identity
+## FPS, ping and CPS status
 
-It replaces only the WLZ launcher/icon/branding and the WLZ helper DEX/runtime. When the original publisher download is unavailable, CI can rebase the freshly built helper onto the last complete verified WLZ APK. The rebasing code removes old standalone WLZ DEX files before inserting the new ones and updates the manifest idempotently, avoiding duplicate launcher activities/classes.
+The launcher currently displays placeholders for FPS, ping and CPS. These values must be collected from code running inside the game:
 
-## Startup recovery
+- FPS needs a frame/render counter from the game process.
+- Ping needs the current server connection or its network statistics.
+- CPS needs Minecraft's in-game input/touch events.
 
-- Optional WLZ module initialization and lifecycle-hook registration are guarded so they cannot abort Application startup.
-- The launcher has a safe fallback screen that logs exceptions under `WLZStartup` rather than leaving a blank/unresponsive window.
-- The protected PairIP Application superclass is preserved; it must exist in the source DEX.
-- The app still needs a real device test. CI verifies build, ZIP integrity, manifest identity, resource table, assets, native library and APK signature, but those checks do not prove Minecraft will launch on every device.
+A separate Android launcher cannot accurately read another app's private runtime state or global touch events. WLZ will not display fabricated values. A compatible, licensed in-game bridge/source is needed before these counters can be enabled.
 
-## Install note
+## Build
 
-Because the original package ID is retained for runtime compatibility, Android treats WLZ as the Minecraft application. Back up worlds and remove/replace the existing Minecraft installation only when ready to test. Do not assume worlds will be retained by the installer.
+GitHub Actions builds `WLZ-Launcher-2.5.0.apk` from the Android project in `app.zip` and `tools.zip`.
+
+The build validates the APK ZIP, APK signature, application ID and launcher DEX. These checks confirm packaging, not real-device Minecraft compatibility; test on a device with Minecraft Bedrock installed.
+
+## Migration
+
+Older WLZ builds embedded or modified the Minecraft package. This launcher is a separate application (`com.wlzclient.launcher`) and launches the installed Bedrock app. The old embedded builds and this launcher are different architectures. Back up worlds before removing or replacing any Minecraft installation.
