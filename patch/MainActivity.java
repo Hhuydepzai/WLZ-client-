@@ -1,16 +1,13 @@
 package com.wlz.client;
 
 import android.app.Activity;
-import android.app.AlertDialog;
-import android.content.ComponentName;
 import android.content.Intent;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.Gravity;
 import android.view.Window;
 import android.widget.Button;
@@ -20,46 +17,26 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-
 public final class MainActivity extends Activity {
-    private static final String[] KNOWN_MINECRAFT_PACKAGES = {
+    private static final int BG = Color.rgb(8, 9, 12);
+    private static final int PANEL = Color.rgb(19, 21, 26);
+    private static final int PANEL_ALT = Color.rgb(27, 30, 36);
+    private static final int STROKE = Color.rgb(48, 53, 63);
+    private static final int ORANGE = Color.rgb(255, 112, 0);
+    private static final int TEXT = Color.rgb(246, 247, 250);
+    private static final int MUTED = Color.rgb(151, 158, 169);
+    private static final String[] MINECRAFT_PACKAGES = {
             "com.mojang.minecraftpe",
             "com.mojang.minecraftpe.preview"
     };
 
-    private static final int BG = Color.rgb(8, 9, 12);
-    private static final int PANEL = Color.rgb(18, 20, 25);
-    private static final int PANEL_2 = Color.rgb(24, 27, 33);
-    private static final int STROKE = Color.rgb(48, 52, 61);
-    private static final int ORANGE = Color.rgb(255, 112, 0);
-    private static final int TEXT = Color.rgb(246, 247, 250);
-    private static final int MUTED = Color.rgb(150, 156, 166);
-
-    private TextView runtimeStatus;
+    private TextView installStatus;
+    private TextView gameName;
     private Button playButton;
-    private List<MinecraftTarget> detectedGames = new ArrayList<>();
+    private String installedPackage;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
-        try {
-            createMainScreen();
-        } catch (Throwable error) {
-            Log.e("WLZStartup", "Main launcher UI failed; showing safe screen", error);
-            showSafeMode();
-        }
-    }
-
-    @Override protected void onResume() {
-        super.onResume();
-        refreshRuntime();
-    }
-
-    private void createMainScreen() {
         Window window = getWindow();
         window.setStatusBarColor(BG);
         window.setNavigationBarColor(BG);
@@ -67,12 +44,18 @@ public final class MainActivity extends Activity {
             window.setStatusBarContrastEnforced(false);
             window.setNavigationBarContrastEnforced(false);
         }
+        buildScreen();
+        refreshMinecraft();
+    }
 
+    @Override protected void onResume() {
+        super.onResume();
+        refreshMinecraft();
+    }
+
+    private void buildScreen() {
         FrameLayout root = new FrameLayout(this);
-        GradientDrawable background = new GradientDrawable(
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.rgb(15, 17, 22), BG, Color.rgb(5, 6, 8)});
-        root.setBackground(background);
+        root.setBackgroundColor(BG);
         setContentView(root);
 
         ScrollView scroll = new ScrollView(this);
@@ -82,318 +65,161 @@ public final class MainActivity extends Activity {
 
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
-        page.setGravity(Gravity.CENTER_HORIZONTAL);
-        page.setPadding(dp(22), dp(22), dp(22), dp(20));
+        page.setPadding(dp(22), dp(20), dp(22), dp(26));
         scroll.addView(page, new ScrollView.LayoutParams(-1, -2));
 
-        page.addView(buildHeader(), top(-1, dp(60)));
-        page.addView(buildHero(), top(22, -2));
+        LinearLayout header = new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        TextView mark = text("WLZ", 27, ORANGE, true);
+        mark.setGravity(Gravity.CENTER);
+        mark.setBackground(round(PANEL_ALT, ORANGE, 1, 15));
+        header.addView(mark, size(dp(62), dp(52)));
 
-        Button choose = button("CHỌN BẢN MINECRAFT");
-        choose.setTextColor(ORANGE);
-        choose.setBackground(round(PANEL_2, STROKE, 1, 14));
-        choose.setOnClickListener(v -> showMinecraftChooser());
-        page.addView(choose, top(12, dp(48)));
-
-        TextView note = text(
-                "WLZ chỉ mở Minecraft đã cài trên máy; không cài thêm bản game và không chèn mod vào ứng dụng bên ngoài.",
-                9, MUTED, false);
-        note.setGravity(Gravity.CENTER);
-        note.setLineSpacing(dp(3), 1.0f);
-        page.addView(note, top(16, -2));
-
-        refreshRuntime();
-    }
-
-    private LinearLayout buildHeader() {
-        LinearLayout row = new LinearLayout(this);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-
-        WlzLogoView logo = new WlzLogoView(this);
-        row.addView(logo, new LinearLayout.LayoutParams(dp(54), dp(54)));
-
-        LinearLayout labels = new LinearLayout(this);
-        labels.setOrientation(LinearLayout.VERTICAL);
-        labels.setPadding(dp(12), 0, 0, 0);
-        labels.addView(text("WLZ CLIENT", 18, TEXT, true), lp(-1, -2));
-        labels.addView(text("MINECRAFT BEDROCK", 9, MUTED, true), top(2, -2));
-        row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
-
-        TextView version = text("V2.5.5", 9, ORANGE, true);
+        LinearLayout branding = new LinearLayout(this);
+        branding.setOrientation(LinearLayout.VERTICAL);
+        branding.setPadding(dp(13), 0, 0, 0);
+        branding.addView(text("WLZ CLIENT", 18, TEXT, true));
+        branding.addView(text("MINECRAFT BEDROCK LAUNCHER", 9, MUTED, true), top(3, -2));
+        header.addView(branding, new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView version = text("2.5.0", 10, ORANGE, true);
         version.setGravity(Gravity.CENTER);
-        version.setPadding(dp(11), dp(7), dp(11), dp(7));
-        version.setBackground(round(PANEL_2, STROKE, 1, 20));
-        row.addView(version, lp(-2, -2));
-        return row;
+        version.setPadding(dp(10), dp(7), dp(10), dp(7));
+        version.setBackground(round(PANEL_ALT, STROKE, 1, 18));
+        header.addView(version, size(-2, -2));
+        page.addView(header);
+
+        LinearLayout hero = new LinearLayout(this);
+        hero.setOrientation(LinearLayout.VERTICAL);
+        hero.setPadding(dp(18), dp(19), dp(18), dp(18));
+        hero.setBackground(round(PANEL, Color.rgb(115, 61, 28), 1, 22));
+        TextView eyebrow = text("YOUR GAME, ALREADY INSTALLED", 9, ORANGE, true);
+        eyebrow.setLetterSpacing(0.08f);
+        hero.addView(eyebrow);
+        hero.addView(text("MỞ MINECRAFT\nTỪ WLZ", 28, TEXT, true), top(9, -2));
+        hero.addView(text(
+                "WLZ tìm Minecraft Bedrock có sẵn trên máy và mở trực tiếp. Không tải lại hay nhúng thêm game vào launcher.",
+                11, MUTED, false), top(8, -2));
+
+        installStatus = text("ĐANG KIỂM TRA MINECRAFT…", 10, MUTED, true);
+        installStatus.setPadding(0, dp(14), 0, dp(3));
+        hero.addView(installStatus);
+
+        gameName = text("Chưa xác định bản game", 10, MUTED, false);
+        hero.addView(gameName, top(3, -2));
+
+        playButton = button("▶   MỞ MINECRAFT");
+        playButton.setTextSize(14);
+        playButton.setTextColor(Color.WHITE);
+        playButton.setBackground(round(ORANGE, ORANGE, 1, 15));
+        playButton.setEnabled(false);
+        playButton.setOnClickListener(v -> launchMinecraft());
+        hero.addView(playButton, top(16, dp(54)));
+        page.addView(hero, top(22, -2));
+
+        TextView metricsTitle = text("CHỈ SỐ TRONG GAME", 11, MUTED, true);
+        metricsTitle.setLetterSpacing(0.08f);
+        page.addView(metricsTitle, top(22, -2));
+
+        LinearLayout metrics = new LinearLayout(this);
+        metrics.setOrientation(LinearLayout.HORIZONTAL);
+        metrics.addView(metricCard("FPS", "--", "Khung hình/giây"), new LinearLayout.LayoutParams(0, dp(104), 1f));
+        LinearLayout.LayoutParams metricGap = new LinearLayout.LayoutParams(0, dp(104), 1f);
+        metricGap.leftMargin = dp(9);
+        metrics.addView(metricCard("PING", "--", "Độ trễ máy chủ"), metricGap);
+        LinearLayout.LayoutParams metricGap2 = new LinearLayout.LayoutParams(0, dp(104), 1f);
+        metricGap2.leftMargin = dp(9);
+        metrics.addView(metricCard("CPS", "--", "Lượt nhấp/giây"), metricGap2);
+        page.addView(metrics, top(10, dp(104)));
+
+        TextView bridgeNote = text(
+                "HUD FPS / PING / CPS sẽ hoạt động khi có bridge chạy bên trong Minecraft. Launcher bên ngoài không thể tự đọc chính xác dữ liệu game hoặc thao tác chạm của game khác.",
+                10, MUTED, false);
+        bridgeNote.setLineSpacing(dp(3), 1f);
+        page.addView(bridgeNote, top(10, -2));
+
+        LinearLayout footer = new LinearLayout(this);
+        footer.setOrientation(LinearLayout.VERTICAL);
+        footer.setPadding(dp(14), dp(13), dp(14), dp(13));
+        footer.setBackground(round(PANEL, STROKE, 1, 16));
+        footer.addView(text("KIẾN TRÚC LAUNCHER", 10, TEXT, true));
+        footer.addView(text(
+                "• Dùng bản Minecraft đã cài sẵn\n• WLZ không thay đổi dữ liệu thế giới\n• Không đóng gói lại assets hoặc thư viện Minecraft",
+                10, MUTED, false), top(6, -2));
+        Button rescan = button("QUÉT LẠI MINECRAFT");
+        rescan.setTextColor(ORANGE);
+        rescan.setBackground(round(PANEL_ALT, STROKE, 1, 12));
+        rescan.setOnClickListener(v -> refreshMinecraft());
+        footer.addView(rescan, top(12, dp(42)));
+        page.addView(footer, top(18, -2));
+
+        TextView bottom = text("WLZ CLIENT  •  BEDROCK", 9, Color.rgb(91, 97, 107), true);
+        bottom.setGravity(Gravity.CENTER);
+        page.addView(bottom, top(18, -2));
     }
 
-    private LinearLayout buildHero() {
+    private View metricCard(String label, String value, String description) {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(18), dp(20), dp(18), dp(18));
-
-        GradientDrawable shape = new GradientDrawable(
-                GradientDrawable.Orientation.TL_BR,
-                new int[]{Color.rgb(38, 28, 22), Color.rgb(20, 20, 24), PANEL});
-        shape.setCornerRadius(dp(22));
-        shape.setStroke(dp(1), Color.rgb(115, 61, 28));
-        card.setBackground(shape);
-
-        TextView eyebrow = text("YOUR WORLD. YOUR WAY.", 9, ORANGE, true);
-        eyebrow.setLetterSpacing(0.10f);
-        card.addView(eyebrow);
-
-        TextView headline = text("SẴN SÀNG\nVÀO GAME?", 28, TEXT, true);
-        headline.setLineSpacing(0f, 0.96f);
-        card.addView(headline, top(8, -2));
-
-        TextView description = text(
-                "Mở bản Minecraft Bedrock đang có trên thiết bị của bạn.",
-                11, MUTED, false);
-        description.setLineSpacing(dp(3), 1.0f);
-        card.addView(description, top(8, -2));
-
-        runtimeStatus = text("ĐANG KIỂM TRA…", 9, MUTED, true);
-        runtimeStatus.setPadding(0, dp(10), 0, 0);
-        card.addView(runtimeStatus, top(4, -2));
-
-        playButton = button("MỞ MINECRAFT");
-        playButton.setTextSize(13);
-        playButton.setTextColor(Color.WHITE);
-        playButton.setBackground(round(ORANGE, ORANGE, 1, 14));
-        playButton.setOnClickListener(v -> {
-            if (findInstalledMinecraftApps().isEmpty()) showNoMinecraftDialog();
-            else launchMinecraft();
-        });
-        card.addView(playButton, top(14, dp(54)));
-
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setPadding(dp(10), dp(10), dp(10), dp(10));
+        card.setBackground(round(PANEL, STROKE, 1, 15));
+        TextView name = text(label, 9, ORANGE, true);
+        name.setGravity(Gravity.CENTER);
+        card.addView(name);
+        TextView number = text(value, 22, TEXT, true);
+        number.setGravity(Gravity.CENTER);
+        card.addView(number, top(4, -2));
+        TextView detail = text(description, 8, MUTED, false);
+        detail.setGravity(Gravity.CENTER);
+        card.addView(detail, top(3, -2));
         return card;
     }
 
-    private void refreshRuntime() {
-        detectedGames = findInstalledMinecraftApps();
-        boolean found = !detectedGames.isEmpty();
-
-        if (runtimeStatus != null) {
-            if (found) {
-                runtimeStatus.setText("●  ĐÃ TÌM THẤY MINECRAFT");
-                runtimeStatus.setTextColor(Color.rgb(106, 208, 138));
-            } else {
-                runtimeStatus.setText("●  CHƯA TÌM THẤY MINECRAFT · KIỂM TRA GAME ĐÃ CÀI");
-                runtimeStatus.setTextColor(Color.rgb(255, 153, 102));
-            }
-        }
-        if (playButton != null) {
-            playButton.setEnabled(true);
-            playButton.setAlpha(1.0f);
-            playButton.setText(found ? "▶  MỞ MINECRAFT ĐÃ CÀI" : "MINECRAFT CHƯA ĐƯỢC TÌM THẤY");
-        }
-    }
-
-    /**
-     * Detect both the usual Bedrock package IDs and any visible launcher app
-     * whose package name contains "com.mojang" or whose name/label identifies Minecraft. The manifest
-     * declares a MAIN/LAUNCHER query so Android 11+ package visibility applies.
-     */
-    private List<MinecraftTarget> findInstalledMinecraftApps() {
-        LinkedHashMap<String, MinecraftTarget> found = new LinkedHashMap<>();
+    private void refreshMinecraft() {
+        installedPackage = null;
+        String foundLabel = null;
         PackageManager pm = getPackageManager();
 
-        for (String packageName : KNOWN_MINECRAFT_PACKAGES) {
+        for (String candidate : MINECRAFT_PACKAGES) {
             try {
-                Intent launch = pm.getLaunchIntentForPackage(packageName);
-                if (launch != null) {
-                    String label = packageLabel(packageName);
-                    ComponentName component = launch.getComponent();
-                    found.put(packageName, new MinecraftTarget(label, packageName, component));
-                }
-            } catch (Throwable error) {
-                Log.w("WLZRuntime", "Known Minecraft package query failed: " + packageName, error);
+                Intent launch = pm.getLaunchIntentForPackage(candidate);
+                if (launch == null) continue;
+                ApplicationInfo info = pm.getApplicationInfo(candidate, 0);
+                installedPackage = candidate;
+                foundLabel = pm.getApplicationLabel(info).toString();
+                break;
+            } catch (PackageManager.NameNotFoundException | SecurityException ignored) {
+                // Try the next known Bedrock package.
+            } catch (Throwable ignored) {
+                // An unexpected package-manager issue must not crash the launcher.
             }
         }
 
-        Intent launcherQuery = new Intent(Intent.ACTION_MAIN);
-        launcherQuery.addCategory(Intent.CATEGORY_LAUNCHER);
-        try {
-            List<ResolveInfo> activities = pm.queryIntentActivities(
-                    launcherQuery, PackageManager.MATCH_DEFAULT_ONLY);
-            for (ResolveInfo info : activities) {
-                if (info == null || info.activityInfo == null || !info.activityInfo.exported) continue;
-                String packageName = info.activityInfo.packageName;
-                if (packageName == null || packageName.isEmpty()) continue;
-                String label;
-                try {
-                    CharSequence appLabel = info.loadLabel(pm);
-                    label = appLabel == null ? packageName : appLabel.toString();
-                } catch (Throwable ignored) {
-                    label = packageName;
-                }
-
-                String p = packageName.toLowerCase(Locale.ROOT);
-                String l = label.toLowerCase(Locale.ROOT);
-                boolean looksLikeMinecraft =
-                        p.contains("com.mojang") || p.contains("minecraft")
-                                || l.contains("minecraft") || l.contains("bedrock")
-                                || KNOWN_MINECRAFT_PACKAGES[0].equals(packageName)
-                                || KNOWN_MINECRAFT_PACKAGES[1].equals(packageName);
-                if (!looksLikeMinecraft) continue;
-
-                ComponentName component = new ComponentName(packageName, info.activityInfo.name);
-                found.putIfAbsent(packageName,
-                        new MinecraftTarget(label, packageName, component));
-            }
-        } catch (Throwable error) {
-            Log.w("WLZRuntime", "Launcher activity query failed", error);
-        }
-
-        return new ArrayList<>(found.values());
-    }
-
-    private String packageLabel(String packageName) {
-        try {
-            PackageManager pm = getPackageManager();
-            android.content.pm.ApplicationInfo info = pm.getApplicationInfo(packageName, 0);
-            CharSequence label = pm.getApplicationLabel(info);
-            if (label != null && label.length() > 0) return label.toString();
-        } catch (Throwable ignored) {}
-        return "Minecraft Bedrock";
+        boolean ready = installedPackage != null;
+        installStatus.setText(ready ? "●  ĐÃ TÌM THẤY MINECRAFT" : "●  CHƯA TÌM THẤY MINECRAFT");
+        installStatus.setTextColor(ready ? Color.rgb(104, 211, 139) : Color.rgb(255, 157, 105));
+        gameName.setText(ready ? foundLabel + "  ·  " + installedPackage : "Cài Minecraft Bedrock rồi nhấn Quét lại");
+        playButton.setEnabled(ready);
+        playButton.setAlpha(ready ? 1f : 0.52f);
+        playButton.setText(ready ? "▶   MỞ MINECRAFT" : "CHƯA CÓ MINECRAFT");
     }
 
     private void launchMinecraft() {
-        refreshRuntime();
-        if (detectedGames.isEmpty()) {
-            showNoMinecraftDialog();
+        if (installedPackage == null) {
+            refreshMinecraft();
+            Toast.makeText(this, "Chưa tìm thấy Minecraft Bedrock đã cài.", Toast.LENGTH_LONG).show();
             return;
         }
-        if (detectedGames.size() > 1) {
-            showMinecraftChooser();
-            return;
-        }
-        launchTarget(detectedGames.get(0));
-    }
-
-    private void showMinecraftChooser() {
-        refreshRuntime();
-        if (detectedGames.isEmpty()) {
-            showNoMinecraftDialog();
-            return;
-        }
-
-        String[] labels = new String[detectedGames.size()];
-        for (int i = 0; i < detectedGames.size(); i++) {
-            MinecraftTarget target = detectedGames.get(i);
-            labels[i] = target.label + "\n" + target.packageName;
-        }
-        new AlertDialog.Builder(this)
-                .setTitle("CHỌN BẢN MINECRAFT")
-                .setItems(labels, (dialog, which) -> launchTarget(detectedGames.get(which)))
-                .setNegativeButton("HỦY", (dialog, which) -> dialog.dismiss())
-                .show();
-    }
-
-
-    /** Never list arbitrary apps. Only offer Minecraft Bedrock / Preview package IDs. */
-    private void showNoMinecraftDialog() {
-        refreshRuntime();
-        new AlertDialog.Builder(this)
-                .setTitle("KHÔNG TÌM THẤY MINECRAFT")
-                .setMessage("WLZ chỉ mở Minecraft Bedrock đã cài. Hãy cài hoặc mở Minecraft một lần từ màn hình chính rồi quay lại đây. WLZ sẽ không liệt kê Chrome, Cài đặt hay các ứng dụng khác.")
-                .setPositiveButton("THỬ BEDROCK", (dialog, which) ->
-                        launchTarget(new MinecraftTarget(
-                                "Minecraft Bedrock",
-                                "com.mojang.minecraftpe",
-                                new ComponentName("com.mojang.minecraftpe",
-                                        "com.mojang.minecraftpe.MainActivity"))))
-                .setNeutralButton("THỬ PREVIEW", (dialog, which) ->
-                        launchTarget(new MinecraftTarget(
-                                "Minecraft Preview",
-                                "com.mojang.minecraftpe.preview",
-                                new ComponentName("com.mojang.minecraftpe.preview",
-                                        "com.mojang.minecraftpe.MainActivity"))))
-                .setNegativeButton("ĐÓNG", (dialog, which) -> dialog.dismiss())
-                .show();
-    }
-
-    private void launchTarget(MinecraftTarget target) {
-        if (target == null || target.packageName == null || target.packageName.isEmpty()) {
-            Toast.makeText(this, "Chưa chọn được ứng dụng Minecraft.", Toast.LENGTH_LONG).show();
-            return;
-        }
-
-        PackageManager pm = getPackageManager();
         try {
-            // Prefer Android's canonical launch intent. Some sideloaded Bedrock
-            // builds expose an activity alias or require flags that a hand-built
-            // MAIN/LAUNCHER intent may omit.
-            Intent intent = pm.getLaunchIntentForPackage(target.packageName);
-
-            // Fallback for renamed/side-loaded clients for which Android cannot
-            // synthesize a package launch intent but did expose a launcher activity.
-            if (intent == null && target.component != null) {
-                intent = new Intent(Intent.ACTION_MAIN);
-                intent.addCategory(Intent.CATEGORY_LAUNCHER);
-                intent.setComponent(target.component);
-            }
-
-            if (intent == null) {
-                Log.w("WLZRuntime", "No launch intent for package " + target.packageName);
-                Toast.makeText(this,
-                        "Android không tìm thấy nút mở cho " + target.label
-                                + ". Mở game một lần từ màn hình chính rồi thử lại.",
-                        Toast.LENGTH_LONG).show();
+            Intent launch = getPackageManager().getLaunchIntentForPackage(installedPackage);
+            if (launch == null) {
+                Toast.makeText(this, "Minecraft không có màn hình khởi chạy khả dụng.", Toast.LENGTH_LONG).show();
                 return;
             }
-
-            intent.addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
-            Log.i("WLZRuntime", "Launching installed game package=" + target.packageName
-                    + " component=" + intent.getComponent());
-            startActivity(intent);
-        } catch (SecurityException error) {
-            Log.e("WLZRuntime", "Android denied launch for " + target.packageName, error);
-            Toast.makeText(this,
-                    "Android chặn việc mở " + target.label
-                            + ". Kiểm tra game đã bật và không bị giới hạn bởi hệ thống.",
-                    Toast.LENGTH_LONG).show();
+            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+            startActivity(launch);
         } catch (Throwable error) {
-            Log.e("WLZRuntime", "Failed to open " + target.packageName, error);
-            Toast.makeText(this,
-                    "Không mở được " + target.label + " (" + target.packageName + "). "
-                            + "Nếu vẫn lỗi, gửi ảnh thông báo này cho WLZ để dò đúng package.",
-                    Toast.LENGTH_LONG).show();
-        }
-    }
-
-    private void showSafeMode() {
-        try {
-            Window window = getWindow();
-            window.setStatusBarColor(BG);
-            window.setNavigationBarColor(BG);
-            FrameLayout root = new FrameLayout(this);
-            root.setBackgroundColor(BG);
-
-            LinearLayout panel = new LinearLayout(this);
-            panel.setOrientation(LinearLayout.VERTICAL);
-            panel.setGravity(Gravity.CENTER_HORIZONTAL);
-            panel.setPadding(dp(24), dp(24), dp(24), dp(24));
-
-            TextView brand = text("WLZ CLIENT", 25, ORANGE, true);
-            brand.setGravity(Gravity.CENTER);
-            panel.addView(brand, top(0, -2));
-
-            TextView detail = text("Không tải được màn hình chính. Hãy đóng app rồi mở lại.", 11, MUTED, false);
-            detail.setGravity(Gravity.CENTER);
-            panel.addView(detail, top(10, -2));
-
-            Button retry = button("MỞ LẠI LAUNCHER");
-            retry.setTextColor(Color.WHITE);
-            retry.setBackground(round(ORANGE, ORANGE, 1, 14));
-            retry.setOnClickListener(v -> recreate());
-            panel.addView(retry, top(18, dp(50)));
-
-            root.addView(panel, new FrameLayout.LayoutParams(-1, -2, Gravity.CENTER));
-            setContentView(root);
-        } catch (Throwable fallbackError) {
-            Log.e("WLZStartup", "Safe launcher screen also failed", fallbackError);
+            Toast.makeText(this, "Không thể mở Minecraft: " + error.getClass().getSimpleName(), Toast.LENGTH_LONG).show();
         }
     }
 
@@ -411,23 +237,13 @@ public final class MainActivity extends Activity {
         return b;
     }
 
-    private TextView text(String value, float size, int color, boolean bold) {
+    private TextView text(String value, float sp, int color, boolean bold) {
         TextView t = new TextView(this);
         t.setText(value);
-        t.setTextSize(size);
+        t.setTextSize(sp);
         t.setTextColor(color);
-        if (bold) t.setTypeface(Typeface.DEFAULT_BOLD);
+        if (bold) t.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         return t;
-    }
-
-    private LinearLayout.LayoutParams lp(int width, int height) {
-        return new LinearLayout.LayoutParams(width, height);
-    }
-
-    private LinearLayout.LayoutParams top(int margin, int height) {
-        LinearLayout.LayoutParams p = lp(-1, height);
-        if (margin > 0) p.topMargin = dp(margin);
-        return p;
     }
 
     private GradientDrawable round(int fill, int stroke, int width, int radius) {
@@ -438,18 +254,17 @@ public final class MainActivity extends Activity {
         return d;
     }
 
-    private int dp(int value) {
-        return Math.round(value * getResources().getDisplayMetrics().density);
+    private LinearLayout.LayoutParams top(int margin, int height) {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, height);
+        if (margin > 0) p.topMargin = dp(margin);
+        return p;
     }
 
-    private static final class MinecraftTarget {
-        final String label;
-        final String packageName;
-        final ComponentName component;
-        MinecraftTarget(String label, String packageName, ComponentName component) {
-            this.label = label;
-            this.packageName = packageName;
-            this.component = component;
-        }
+    private LinearLayout.LayoutParams size(int width, int height) {
+        return new LinearLayout.LayoutParams(width, height);
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
     }
 }
