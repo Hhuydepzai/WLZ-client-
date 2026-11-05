@@ -1,37 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Android 11+ package visibility: let WLZ detect the installed Bedrock app. -->
+
     <queries>
         <package android:name="com.mojang.minecraftpe" />
         <package android:name="com.mojang.minecraftpe.preview" />
-        <!-- Some sideloaded Bedrock builds use a different package ID.
-             Query launcher activities and identify Minecraft by its app label. -->
-        <intent>
-            <action android:name="android.intent.action.MAIN" />
-            <category android:name="android.intent.category.LAUNCHER" />
-        </intent>
     </queries>
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- This sideloaded launcher must list installed apps so renamed Minecraft builds appear. -->
-    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
-    <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
         android:name="com.wlz.client.WlzApplication"
         android:allowBackup="false"
-        android:label="WLZ Client"
         android:icon="@drawable/wlz_icon"
+        android:label="WLZ Client"
         android:roundIcon="@drawable/wlz_icon"
         android:supportsRtl="true"
-        android:extractNativeLibs="true"
         android:theme="@style/AppTheme">
-
-        <activity
-            android:name="com.wlz.client.WlzControlEditorActivity"
-            android:exported="false"
-            android:screenOrientation="portrait" />
 
         <activity
             android:name="com.wlz.client.MainActivity"
@@ -42,5 +26,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
     </application>
 </manifest>
