@@ -29,6 +29,7 @@ import android.widget.Toast;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -57,6 +58,8 @@ public final class WlzInGameHud {
     private final WlzLogoView circle;
 
     private TextView fpsText;
+    private TextView cpsText;
+    private final ArrayDeque<Long> recentClicks = new ArrayDeque<Long>();
     private FrameLayout radialMenu;
     private LinearLayout keyMapperPanel;
     private final Map<Integer, Button> floatingActions = new HashMap<Integer, Button>();
@@ -299,6 +302,12 @@ public final class WlzInGameHud {
                     new InvocationHandler() {
                         @Override
                         public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+                            if ("dispatchTouchEvent".equals(method.getName())
+                                    && args != null && args.length == 1
+                                    && args[0] instanceof MotionEvent) {
+                                MotionEvent touch = (MotionEvent) args[0];
+                                if (touch.getActionMasked() == MotionEvent.ACTION_DOWN) recordClick();
+                            }
                             if ("dispatchKeyEvent".equals(method.getName())
                                     && args != null
                                     && args.length == 1
@@ -891,6 +900,22 @@ public final class WlzInGameHud {
         return max;
     }
 
+    private void recordClick() {
+        long now = SystemClock.elapsedRealtime();
+        synchronized (recentClicks) {
+            recentClicks.addLast(now);
+            while (!recentClicks.isEmpty() && now - recentClicks.peekFirst() > 1000L) recentClicks.removeFirst();
+        }
+    }
+
+    private int currentCps() {
+        long now = SystemClock.elapsedRealtime();
+        synchronized (recentClicks) {
+            while (!recentClicks.isEmpty() && now - recentClicks.peekFirst() > 1000L) recentClicks.removeFirst();
+            return recentClicks.size();
+        }
+    }
+
     private final Choreographer.FrameCallback frameCallback = new Choreographer.FrameCallback() {
         @Override
         public void doFrame(long frameTimeNanos) {
@@ -901,7 +926,10 @@ public final class WlzInGameHud {
                 frameCount = 0;
                 frameWindowStart = now;
                 if (fpsText != null) {
-                    activity.runOnUiThread(() -> fpsText.setText("FPS " + fps));
+                    activity.runOnUiThread(() -> {
+                        if (fpsText != null) fpsText.setText("FPS " + fps);
+                        if (cpsText != null) cpsText.setText("CPS " + currentCps());
+                    });
                 }
             }
             Choreographer.getInstance().postFrameCallback(this);
@@ -914,11 +942,19 @@ public final class WlzInGameHud {
         fpsText = text("FPS 0", 10, TEXT, true);
         fpsText.setBackground(round(Color.argb(170, 10, 12, 16), ORANGE, 1, 9));
         fpsText.setPadding(dp(7), dp(5), dp(7), dp(5));
+        cpsText = text("CPS 0", 10, TEXT, true);
+        cpsText.setBackground(round(Color.argb(170, 10, 12, 16), ORANGE, 1, 9));
+        cpsText.setPadding(dp(7), dp(5), dp(7), dp(5));
 
         FrameLayout.LayoutParams fp = new FrameLayout.LayoutParams(-2, -2);
         fp.leftMargin = dp(14);
         fp.topMargin = dp(244);
         layer.addView(fpsText, fp);
+        FrameLayout.LayoutParams cp = new FrameLayout.LayoutParams(-2, -2);
+        cp.leftMargin = dp(14);
+        cp.topMargin = dp(280);
+        layer.addView(cpsText, cp);
+        synchronized (recentClicks) { recentClicks.clear(); }
 
         frameCount = 0;
         frameWindowStart = System.nanoTime();
@@ -930,6 +966,8 @@ public final class WlzInGameHud {
         Choreographer.getInstance().removeFrameCallback(frameCallback);
         layer.removeView(fpsText);
         fpsText = null;
+        if (cpsText != null) { layer.removeView(cpsText); cpsText = null; }
+        synchronized (recentClicks) { recentClicks.clear(); }
     }
 
     private Button button(String s) {
