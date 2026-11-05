@@ -31,10 +31,13 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools build-tools;35.0.0 platforms;android-35'
+
       - name: Extract Android project
-        run: |
-          unzip -q app.zip
-          unzip -q tools.zip
+        run: unzip -q app.zip
 
       - name: Apply standalone launcher patch
         run: python3 patch/apply.py
