@@ -1,4 +1,6 @@
-plugins { id 'com.android.application' }
+plugins {
+    id 'com.android.application'
+}
 
 android {
     namespace 'com.wlz.client'
@@ -8,15 +10,16 @@ android {
         applicationId 'com.wlzclient.launcher'
         minSdk 26
         targetSdk 35
-        versionCode 255
-        versionName '2.5.5'
+        versionCode 250
+        versionName '2.5.0'
     }
 
     buildTypes {
-        debug { minifyEnabled false }
+        debug {
+            minifyEnabled false
+        }
         release {
             minifyEnabled false
-            ndk { debugSymbolLevel 'none' }
         }
     }
 
@@ -25,4 +28,9 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 
+    packaging {
+        resources {
+            excludes += ['/META-INF/{AL2.0,LGPL2.1}']
+        }
+    }
 }
